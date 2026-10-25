@@ -1,0 +1,27 @@
+# user configuration and secrets (the repo ships only the example)
+config.json
+secrets.json
+state.json
+.env
+
+# runtime state and logs
+*.log
+logs/
+cursor.json
+companion.lock
+companion.pid
+companion.log
+service.log
+
+# photos for the presentation page: the bundled examples are versioned, yours are not
+slides/*
+!slides/README.md
+!slides/*.jpg
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/

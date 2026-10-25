@@ -1,0 +1,7 @@
+winrt-runtime>=4.0
+winrt-Windows.Foundation>=4.0
+winrt-Windows.Foundation.Collections>=4.0
+winrt-Windows.Media.Control>=4.0
+winrt-Windows.Storage.Streams>=4.0
+pywin32>=308
+pillow>=10

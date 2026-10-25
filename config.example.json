@@ -1,0 +1,176 @@
+{
+  "_comment": [
+    "Copy this file to config.json and adjust it. There is NO token here: it lives in",
+    "%APPDATA%/mcp-display-companion/secrets.json (Windows) or",
+    "~/.config/mcp-display-companion/secrets.json, as {\"panel_token\": \"...\"}.",
+    "Documentation: docs/configuration.md and docs/actions.md.",
+    "Labels below are in Portuguese because they are the panel screen wording - translate them freely."
+  ],
+  "panel": {
+    "url": "http://192.168.1.50:7777/mcp",
+    "client_name": "mcp-display-companion",
+    "subscribe": true,
+    "poll_ms": 700
+  },
+  "loop": {
+    "heartbeat_s": 60,
+    "max_event_age_s": 60,
+    "confirm": true
+  },
+  "display": {
+    "enabled": true,
+    "brightness": "max",
+    "refresh_min": 5
+  },
+  "live": {
+    "weather": {
+      "enabled": true,
+      "latitude": -23.5505,
+      "longitude": -46.6333,
+      "label": "São Paulo",
+      "refresh_min": 15
+    },
+    "media": {
+      "enabled": true,
+      "interval_s": 1,
+      "cover": true,
+      "cover_px": 160
+    }
+  },
+  "view": {
+    "title": "Painel",
+    "show_clock": true,
+    "show_weather": true
+  },
+  "actions": [
+    {
+      "id": "pc_midia_play_pause",
+      "label": "Play/Pause",
+      "type": "media",
+      "command": "play_pause",
+      "icon": "playpause",
+      "page": 1,
+      "featured": true
+    },
+    {
+      "id": "pc_midia_anterior",
+      "label": "Anterior",
+      "type": "media",
+      "command": "previous",
+      "icon": "prev"
+    },
+    {
+      "id": "pc_midia_proxima",
+      "label": "Próxima",
+      "type": "media",
+      "command": "next",
+      "icon": "next",
+      "accent": true
+    },
+    {
+      "id": "pc_volume_menos",
+      "label": "Vol -",
+      "type": "volume",
+      "direction": "down",
+      "icon": "volume_down"
+    },
+    {
+      "id": "pc_volume_mais",
+      "label": "Vol +",
+      "type": "volume",
+      "direction": "up",
+      "icon": "volume_up"
+    },
+    {
+      "id": "pc_abrir_spotify",
+      "label": "Spotify",
+      "type": "app",
+      "target": "spotify:",
+      "icon": "spotify",
+      "color": "#1ed760"
+    },
+    {
+      "id": "pc_abrir_youtube",
+      "label": "YouTube",
+      "type": "url",
+      "url": "https://www.youtube.com",
+      "browser": "chrome",
+      "new_window": true,
+      "icon": "youtube",
+      "color": "#ff0000"
+    },
+    {
+      "id": "pc_abrir_downloads",
+      "label": "Downloads",
+      "type": "folder",
+      "path": "%USERPROFILE%/Downloads",
+      "icon": "download",
+      "color": "#38bdf8"
+    },
+    {
+      "id": "pc_abrir_documentos",
+      "label": "Documentos",
+      "type": "folder",
+      "path": "%USERPROFILE%/Documents",
+      "icon": "folder",
+      "color": "#fbbf24"
+    },
+    {
+      "id": "pc_bloquear",
+      "label": "Bloquear",
+      "type": "command",
+      "cmd": [
+        "rundll32.exe",
+        "user32.dll,LockWorkStation"
+      ],
+      "icon": "power",
+      "color": "#a78bfa"
+    },
+    {
+      "id": "pc_descanso_ativar",
+      "label": "Ativar descanso",
+      "type": "rest",
+      "state": true,
+      "pages": [
+        3
+      ]
+    },
+    {
+      "id": "pc_descanso_desativar",
+      "label": "Desativar descanso",
+      "type": "rest",
+      "state": false,
+      "pages": [
+        3
+      ]
+    },
+    {
+      "id": "pc_relogio_fotos_ativar",
+      "label": "Relógio sobre as fotos",
+      "type": "overlay",
+      "state": true,
+      "pages": [
+        3
+      ]
+    },
+    {
+      "id": "pc_relogio_fotos_desativar",
+      "label": "Sem relógio nas fotos",
+      "type": "overlay",
+      "state": false,
+      "pages": [
+        3
+      ]
+    }
+  ],
+  "rest": {
+    "enabled": false,
+    "idle_s": 60
+  },
+  "slides": {
+    "folder": "slides",
+    "interval_s": 20,
+    "shuffle": false,
+    "clock": false
+  }
+}

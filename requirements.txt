@@ -1,0 +1,3 @@
+# O serviço roda com a biblioteca padrão. Nada é obrigatório.
+# No Windows, para mídia/faixa/capa e navegação de pastas:
+#   pip install -r requirements-windows.txt

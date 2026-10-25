@@ -1,0 +1,38 @@
+[project]
+name = "mcp-display-companion"
+version = "1.0.0"
+description = "Runs the touches of an MCP Display wall panel on your computer (media, volume, shortcuts)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+# Full Windows support: system media (GSMTC), Explorer via Shell COM, album cover
+windows = [
+  "winrt-runtime>=4.0",
+  "winrt-Windows.Foundation>=4.0",
+  "winrt-Windows.Foundation.Collections>=4.0",
+  "winrt-Windows.Media.Control>=4.0",
+  "winrt-Windows.Storage.Streams>=4.0",
+  "pywin32>=308",
+  "pillow>=10",
+]
+dev = ["pytest>=8"]
+
+[project.scripts]
+mcp-display-companion = "mcp_display_companion.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["mcp_display_companion"]
+
+[tool.setuptools.package-data]
+mcp_display_companion = ["templates/*.html"]

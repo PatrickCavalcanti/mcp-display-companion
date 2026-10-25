@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    # Windows entra na matriz porque `expand_path` e o host têm caminho próprio lá
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: instalar pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: rodar a suíte
+        # o serviço roda com a biblioteca padrão; winrt/pywin32 são opcionais e
+        # exclusivos do Windows, então o CI (Linux) exercita tudo com fakes
+        run: python -m pytest -q

@@ -107,11 +107,49 @@ body.ver-slides .slide-fundo{opacity:1}
 #relogio-slide{position:absolute;left:0;bottom:0;padding:0 30px 64px;
   display:none;pointer-events:none}
 body.relogio-imagens #relogio-slide{display:block}
+
+/* véu no canto: devolve contraste local sem apagar a foto.
+   A força vem da medição (--veu), então em foto bem escura ele quase some. */
+#relogio-slide::before{
+  /* área enxuta: só onde o relógio realmente escreve (menos pixel para o
+     backdrop-filter desfocar a cada quadro do crossfade) */
+  content:"";position:absolute;left:-4%;bottom:10%;width:64%;height:56%;
+  /* sem z-index negativo: assim o vidro pinta DEPOIS das camadas da foto (é o
+     que o backdrop-filter precisa desfocar) e ANTES do texto, que vem a seguir */
+  pointer-events:none;
+  /* o vidro: desfoca só o que está atrás do relógio, e a máscara dissolve a
+     borda para não virar um retângulo */
+  backdrop-filter:blur(6px) saturate(1.05);
+  -webkit-backdrop-filter:blur(6px) saturate(1.05);
+  -webkit-mask-image:radial-gradient(120% 120% at 0% 100%, #000 0%, #000 52%, transparent 88%);
+  mask-image:radial-gradient(120% 120% at 0% 100%, #000 0%, #000 52%, transparent 88%);
+  background:radial-gradient(120% 120% at 0% 100%,
+    rgba(0,0,0,var(--veu,0)) 0%, rgba(0,0,0,0) 78%);
+}
+body.foto-clara #relogio-slide::before{
+  background:radial-gradient(120% 120% at 0% 100%,
+    rgba(255,255,255,var(--veu,0)) 0%, rgba(255,255,255,0) 78%);
+}
+
+/* tinta ESCURA é o padrão (foto clara); `foto-escura` inverte.
+   O contorno (-webkit-text-stroke) é a "bordinha": define a borda do glifo
+   mesmo quando o fundo é do meio-tom e a tinta é translúcida. */
 #hora-slide{font-size:clamp(72px,30vh,170px);font-weight:600;line-height:.92;
-  letter-spacing:-.045em;color:#fff;opacity:.34;
-  text-shadow:0 2px 24px rgba(0,0,0,.35)}
-#data-slide{margin-top:10px;font-size:16px;font-weight:600;color:#fff;opacity:.42;
-  letter-spacing:.01em;text-shadow:0 1px 10px rgba(0,0,0,.35)}
+  letter-spacing:-.045em;opacity:.62;color:#0b0d12;
+  -webkit-text-stroke:.05em rgba(255,255,255,.8);paint-order:stroke fill;
+  text-shadow:0 2px 22px rgba(255,255,255,.4)}
+#data-slide{margin-top:10px;font-size:16px;font-weight:600;opacity:.72;
+  letter-spacing:.01em;color:#0b0d12;
+  -webkit-text-stroke:.07em rgba(255,255,255,.7);paint-order:stroke fill;
+  text-shadow:0 1px 8px rgba(255,255,255,.35)}
+
+body.foto-escura #hora-slide{color:#fff;opacity:.45;
+  -webkit-text-stroke:.05em rgba(0,0,0,.7);
+  text-shadow:0 2px 22px rgba(0,0,0,.5)}
+body.foto-escura #data-slide{color:#fff;opacity:.6;
+  -webkit-text-stroke:.07em rgba(0,0,0,.65);
+  text-shadow:0 1px 8px rgba(0,0,0,.45)}
+body.foto-escura #slide-progresso{background:rgba(0,0,0,.32)}
 body.descanso #relogio-slide{display:none!important}
 
 /* small ring in the corner: how long the current photo still has */
@@ -403,6 +441,56 @@ function aplicar(d) {
 
 /* two alternating layers: the incoming one fades in on top */
 var currentLayer = null;
+/* A tinta do relógio vem da própria foto.
+   A imagem é desenhada num canvas no formato da tela (recorte igual ao `cover`
+   do CSS) e duas faixas são medidas: a da hora e a da data. Para cada faixa,
+   escolhe-se a tinta de maior contraste e calcula-se o véu que falta.
+   Data URL é da mesma origem: ler os pixels não contamina o canvas. */
+var medidaFoto = document.createElement('canvas');
+function luminanciaDaFaixa(dados, largura, deY, ateY, ateX) {
+  var soma = 0, n = 0;
+  for (var y = Math.round(deY); y < Math.round(ateY); y++) {
+    for (var x = 0; x < Math.round(ateX); x++) {
+      var i = (y * largura + x) * 4;
+      soma += 0.2126 * dados[i] + 0.7152 * dados[i + 1] + 0.0722 * dados[i + 2];
+      n++;
+    }
+  }
+  return n ? soma / n : 128;
+}
+
+function medirFundo(src) {
+  var img = new Image();
+  img.onload = function () {
+    try {
+      var L = 96, A = 50;                      /* 96x50 ≈ 692x360, o formato da tela */
+      medidaFoto.width = L; medidaFoto.height = A;
+      var ctx = medidaFoto.getContext('2d', {willReadFrequently: true});
+      /* mesmo recorte do background-size: cover */
+      var escala = Math.max(L / img.width, A / img.height);
+      var largura = img.width * escala, altura = img.height * escala;
+      ctx.drawImage(img, (L - largura) / 2, (A - altura) / 2, largura, altura);
+      var dados = ctx.getImageData(0, 0, L, A).data;
+
+      var hora = luminanciaDaFaixa(dados, L, A * 0.45, A * 0.75, L * 0.55);
+      var data = luminanciaDaFaixa(dados, L, A * 0.78, A * 0.95, L * 0.55);
+
+      /* o branco tem muito mais brilho que o preto tem escuridão: o ponto em que
+         as duas tintas empatam em contraste fica perto de 70, não de 128 */
+      document.body.classList.toggle('foto-escura', hora < 72);
+
+      /* véu: máximo no meio-tom (onde nenhuma tinta resolve), quase zero nos extremos */
+      var contraste = Math.abs(hora - 128) / 128;          /* 0 = cinza, 1 = extremo */
+      var veu = Math.max(0, Math.min(0.42, 0.42 - contraste * 0.34));
+      /* a data é menor: sofre mais, então pede um pouco mais de véu */
+      var contrasteData = Math.abs(data - 128) / 128;
+      veu = Math.max(veu, Math.max(0, Math.min(0.30, 0.30 - contrasteData * 0.24)));
+      document.body.style.setProperty('--veu', veu.toFixed(2));
+    } catch (e) { /* WebView sem canvas: fica na tinta escura, que é a mais segura */ }
+  };
+  img.src = src;
+}
+
 var ringAnimation = null;
 function countNextPhoto(seconds) {
   var arco = el('anel-arco');
@@ -430,6 +518,7 @@ function showSlide(slide) {
   currentLayer = proxima;
   var legenda = el('slide-legenda');
   if (legenda) legenda.textContent = slide.caption || '';
+  medirFundo(slide.src);
 }
 
 function iconeClima(c) {

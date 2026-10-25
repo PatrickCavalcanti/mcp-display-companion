@@ -130,6 +130,11 @@ choice is stored on the PC, so reloading the screen does not forget it. Going
 dark also drops the **device brightness to the minimum** and puts it back on the
 first touch. Off is the default: the screen simply stays on.
 
+The clock over the photos measures the picture: it picks **white ink on a dark
+photo and dark ink on a light one**, adds a thin outline in the opposite tone and
+frosts (blurs) only the patch behind the text — so a bright sky or a busy palm
+tree does not wash the time out.
+
 ## What it does with events
 
 | Event | What the service does |

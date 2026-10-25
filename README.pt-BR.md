@@ -129,7 +129,11 @@ modo descanso. Ligado, depois de `rest.idle_s` segundos sem toque a tela vira a
 mesma página inicial em **preto puro, texto branco e sem a capa do álbum** — os
 pixels baratos de um OLED — e o primeiro toque acorda. A escolha fica guardada no
 PC, então recarregar a tela não esquece. Escurecer também leva o **brilho do
-aparelho ao mínimo** e o devolve no primeiro toque. Desligado é o padrão: a tela
+aparelho ao mínimo** e o devolve no primeiro toque.
+
+O relógio sobre as fotos mede a imagem: escolhe **tinta branca em foto escura e
+escura em foto clara**, ganha um contorno fino na cor oposta e desfoca só o
+pedaço atrás do texto — céu claro ou palmeira não apagam mais a hora. Desligado é o padrão: a tela
 fica sempre acesa.
 
 ## O que ele faz com cada evento

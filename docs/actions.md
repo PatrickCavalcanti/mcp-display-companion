@@ -54,11 +54,17 @@ Use it for anything without a dedicated type. Keys go to the focused window.
 | Field | Values |
 |---|---|
 | `path` | absolute path, `~`, `%VARS%`; a relative path is resolved against the `config.json` directory |
+| `reuse_window` | `false` (default) opens a **new window**; `true` navigates an Explorer window already open — pulls the user out of where they were, so it is opt-in |
 
-**Windows:** if an Explorer window is already open, it *navigates* that window
-(Shell COM) instead of opening a second one — with a 4-second ceiling, so a
+**Windows:** by default it always opens a **new Explorer window**, like Win+E —
+`explorer.exe <folder>` in its own process, never a shell line, and
+`AllowSetForegroundWindow(ASFW_ANY)` is called first so the window comes to the
+front instead of behind the panel. A missing folder is reported as a failed
+action, not silence. `"reuse_window": true` brings back the old behavior: it
+*navigates* the first Explorer window (Shell COM) with a 4-second ceiling, so a
 stuck COM call can never freeze the touch loop; on timeout it falls back to
-`explorer.exe`. A missing folder is reported as a failed action, not silence.
+`explorer.exe`. **macOS/Linux:** `open` / `xdg-open`, always a new window;
+`reuse_window` has no effect there.
 
 ## `app` — launch an app or protocol
 
@@ -83,8 +89,18 @@ Protocols are passed through untouched; paths are expanded.
 | Field | Values |
 |---|---|
 | `url` | must start with `http(s)://` |
-| `browser` | `chrome`, `edge`, `firefox` (Windows lookup) or empty for the default browser |
-| `new_window` | opens a new window instead of a tab |
+| `browser` | `chrome`, `edge`, `brave`, `firefox` (Windows lookup by path) or empty for the **default browser** |
+| `new_window` | `true` (default) opens a **new window**; `false` opens a tab in the browser already open |
+
+**Windows:** the default browser comes from the registry
+(`HKCU\...\UrlAssociations\https\UserChoice\ProgId` →
+`HKCR\<ProgId>\shell\open\command`), and the executable is started with the
+flag its family understands — `--new-window <url>` (Chrome, Edge, Brave,
+Chromium, Vivaldi, Opera) or `-new-window <url>` (Firefox). The argument list is
+passed to the process directly (no shell). Before launching,
+`AllowSetForegroundWindow(ASFW_ANY)` lets the new window take the focus — without
+it the window opens behind everything and looks like the button did nothing. An
+unrecognized browser falls back to `webbrowser.open_new`.
 
 ## `command` — a command line declared here
 

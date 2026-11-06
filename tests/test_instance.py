@@ -1,8 +1,25 @@
 """Single instance: two companions on the same panel conflict over View."""
 
+import json
+
 import pytest
 
+from mcp_display_companion import config as config_module
+from mcp_display_companion.__main__ import main
 from mcp_display_companion.instance import InstanceLock
+
+
+def write_config(folder, actions=None):
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "config.json"
+    path.write_text(
+        json.dumps({
+            "panel": {"url": "http://127.0.0.1/mcp", "token": "fake-token"},
+            "actions": actions or [{"id": "pc_key", "type": "key", "vk": 175}],
+        }),
+        encoding="utf-8",
+    )
+    return path
 
 
 def test_second_instance_is_refused(tmp_path):
@@ -41,3 +58,51 @@ def test_acquire_release_cycles(tmp_path, times):
     for _ in range(times):
         assert lock.acquire() is True
         lock.release()
+
+
+# --------------------------------------------------------------------------- #
+# the lock belongs to the user, not to the folder the clone was started from
+# --------------------------------------------------------------------------- #
+def test_default_lock_lives_next_to_the_token(monkeypatch, tmp_path):
+    monkeypatch.setattr(config_module, "default_secrets_path", lambda: tmp_path / "cfg" / "secrets.json")
+    assert config_module.default_lock_path() == tmp_path / "cfg" / "companion.lock"
+
+
+def test_second_clone_in_another_folder_is_refused(tmp_path, capsys):
+    """A new clone has its own `companion.lock` path... unless the lock is per user."""
+    clone = tmp_path / "clone"
+    cfg_path = write_config(clone)
+    lock_path = config_module.default_lock_path()
+    first = InstanceLock(lock_path, owner={"folder": str(tmp_path / "old-companion")})
+    assert first.acquire() is True
+    try:
+        assert main(["-c", str(cfg_path)]) == 0
+        owner_pid = first.owner_details()["pid"]
+    finally:
+        first.release()
+
+    out = capsys.readouterr().out
+    assert "another companion is already running" in out
+    assert f"pid {owner_pid}" in out
+    assert str(tmp_path / "old-companion") in out
+
+
+def test_lock_reports_the_folder_of_its_owner(tmp_path):
+    lock = InstanceLock(tmp_path / "companion.lock", owner={"folder": r"C:\work\companion"})
+    assert lock.acquire() is True
+    try:
+        other = InstanceLock(tmp_path / "companion.lock")
+        assert other.acquire() is False
+        assert other.owner_details()["folder"] == r"C:\work\companion"
+        assert "folder" in other.describe_owner()
+        assert r"C:\work\companion" in other.describe_owner()
+    finally:
+        lock.release()
+
+
+def test_owner_file_goes_away_on_release(tmp_path):
+    lock = InstanceLock(tmp_path / "companion.lock", owner={"folder": str(tmp_path)})
+    assert lock.acquire() is True
+    assert lock.owner_file().exists()
+    lock.release()
+    assert not lock.owner_file().exists()

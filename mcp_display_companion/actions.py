@@ -97,7 +97,11 @@ class ActionRunner:
         path = self._path(str(action.params["path"]))
         if not path.exists():
             return ActionResult(False, f"folder not found: {path}")
-        return ActionResult(self.host.open_folder(path), f"folder {path}")
+        # new window by default: navigating an open Explorer window moves the
+        # user out of where they were
+        reuse_window = bool(action.params.get("reuse_window", False))
+        ok = self.host.open_folder(path, reuse_window=reuse_window)
+        return ActionResult(ok, f"folder {path} (reused window)" if reuse_window else f"folder {path}")
 
     def _run_app(self, action: Action) -> ActionResult:
         target = str(action.params["target"])
@@ -113,7 +117,9 @@ class ActionRunner:
         ok = self.host.open_url(
             str(params["url"]),
             browser=str(params.get("browser") or ""),
-            new_window=bool(params.get("new_window", False)),
+            # new window by default: a tab in a browser already open is hidden
+            # behind other windows and looks like the button did nothing
+            new_window=bool(params.get("new_window", True)),
         )
         return ActionResult(ok, f"url {params['url']}")
 

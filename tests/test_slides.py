@@ -2,9 +2,12 @@
 
 import pytest
 
+from mcp_display_companion import config as config_module
 from mcp_display_companion import view
+from mcp_display_companion.__main__ import _announce_slides
 from mcp_display_companion.config import (
     Action,
+    Config,
     ConfigError,
     PanelSection,
     RestSection,
@@ -27,6 +30,46 @@ def test_folder_turns_the_page_on(load_config, raw_config, tmp_path):
     cfg = load_config(raw_config)
     assert cfg.slides.enabled is True
     assert cfg.slides.folder == tmp_path
+
+
+# --------------------------------------------------------------------------- #
+# startup line: which photos the screen is showing
+# --------------------------------------------------------------------------- #
+def make_slides_config(tmp_path, folder):
+    return Config(
+        panel=PanelSection("http://127.0.0.1/mcp", "fake-token", cursor_file=tmp_path / "cursor.json"),
+        actions=[],
+        slides=SlidesSection(enabled=True, folder=folder),
+    )
+
+
+def test_startup_line_says_how_many_photos_and_where(tmp_path):
+    pictures = tmp_path / "Pictures"
+    pictures.mkdir()
+    for name in ("a.jpg", "b.png", "notes.txt"):
+        (pictures / name).write_bytes(b"x")
+    messages = []
+    _announce_slides(make_slides_config(tmp_path, pictures), messages.append)
+    assert len(messages) == 1
+    assert "slides: 2 photo(s) in" in messages[0]
+    assert str(pictures.resolve()) in messages[0]
+    assert "example" not in messages[0]
+
+
+def test_startup_line_flags_the_bundled_example_photos(tmp_path):
+    messages = []
+    _announce_slides(
+        make_slides_config(tmp_path, config_module.default_slides_folder()), messages.append
+    )
+    assert "example photos that ship with the project" in messages[0]
+
+
+def test_startup_line_when_slides_are_disabled(tmp_path):
+    messages = []
+    cfg = Config(panel=PanelSection("http://127.0.0.1/mcp", "fake-token",
+                                    cursor_file=tmp_path / "cursor.json"), actions=[])
+    _announce_slides(cfg, messages.append)
+    assert messages == ["slides: disabled"]
 
 
 def test_explicit_false_keeps_it_off(load_config, raw_config, tmp_path):

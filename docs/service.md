@@ -81,14 +81,22 @@ screen flickers while touches get lost. This really happened here — a supervis
 was stopped while its child survived, and a second install added another pair.
 
 The companion takes an **OS level file lock** (`companion.lock`, released
-automatically when the process dies) and writes its PID to `companion.pid`. A
-second start logs
-`já existe um companheiro rodando com esta configuração (pid …); saindo sem publicar nada`
+automatically when the process dies) and writes its PID to `companion.pid`. The
+lock is **per user**, in the same folder as the token saved by `--set-token`
+(`%APPDATA%\mcp-display-companion\companion.lock` on Windows,
+`~/.config/mcp-display-companion/companion.lock` elsewhere) — *not* next to
+`config.json`, so a second clone in another folder is refused too.
+`PANEL_COMPANION_LOCK` overrides the path. `companion.owner.json` records who
+holds it (pid and folder), and a second start logs
+`another companion is already running (pid …, folder …)`
 and exits without publishing. The Windows installer reads `companion.pid` so it
 can kill an orphaned child whose supervisor is already gone.
 
-If you ever see `republicando a tela` repeating every minute in the log, look
-for a second process before anything else.
+If the panel keeps rejecting `update_view` (`presentation não é a sua View aberta
+agora`), the service republishes with backoff — a couple of attempts, spaced out
+— and then stops for a while, logging
+`outro agente/serviço está usando o painel`. The screen stops jumping back to the
+first page; look for a second process before anything else.
 
 ## Reading the logs
 

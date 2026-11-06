@@ -9,13 +9,16 @@ process or an orphaned child of a crashed supervisor.
 The lock uses OS-level file locking rather than a plain PID file: it is released
 automatically if the process dies, even abnormally, never leaving a stale lock
 blocking future starts. The PID is stored alongside only so the installer knows
-which process to terminate.
+which process to terminate; `companion.owner.json` says who holds it (pid and
+folder), so a second start can tell the user exactly which companion is running.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from typing import Any
 
 if os.name == "nt":
     import msvcrt
@@ -24,8 +27,11 @@ else:
 
 
 class InstanceLock:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, owner: dict[str, Any] | None = None) -> None:
         self.path = Path(path)
+        # extra information written with the lock, so the next start can report
+        # which folder the running companion was started from
+        self.owner = dict(owner or {})
         self._file = None
 
     # On Windows file locking also blocks reading the locked byte range;
@@ -46,15 +52,51 @@ class InstanceLock:
             file_obj.close()
             return False
         self._file = file_obj
-        # Store PID in companion.pid alongside
+        self._write_owner_files()
+        return True
+
+    def _write_owner_files(self) -> None:
+        pid = os.getpid()
         try:
-            self.pid_file().write_text(str(os.getpid()), encoding="utf-8")
+            self.pid_file().write_text(str(pid), encoding="utf-8")
         except OSError:
             pass
-        return True
+        try:
+            info = {"pid": pid, **self.owner}
+            self.owner_file().write_text(json.dumps(info), encoding="utf-8")
+        except OSError:
+            pass
 
     def pid_file(self) -> Path:
         return self.path.with_name("companion.pid")
+
+    def owner_file(self) -> Path:
+        return self.path.with_name("companion.owner.json")
+
+    def owner_details(self) -> dict[str, Any]:
+        """Who holds the lock: `pid` and the `folder` it was started from."""
+        data: dict[str, Any] = {}
+        try:
+            raw = json.loads(self.owner_file().read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+        except (OSError, ValueError):
+            data = {}
+        return {
+            "pid": data.get("pid") or self.owner_pid(),
+            "folder": data.get("folder"),
+            "config": data.get("config"),
+        }
+
+    def describe_owner(self) -> str:
+        """`pid 1234, folder C:\\...` for the message shown by the second start."""
+        details = self.owner_details()
+        pid = details.get("pid")
+        folder = details.get("folder")
+        return (
+            f"pid {pid if pid else 'unknown'}, "
+            f"folder {folder if folder else 'unknown'}"
+        )
 
     def release(self) -> None:
         file_obj, self._file = self._file, None
@@ -62,6 +104,7 @@ class InstanceLock:
             return
         try:
             self.pid_file().unlink(missing_ok=True)
+            self.owner_file().unlink(missing_ok=True)
         except OSError:
             pass
         try:

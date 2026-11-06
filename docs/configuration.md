@@ -90,7 +90,7 @@ A page to the **left** of the clock that loops through the images of one folder
 
 | Key | Default | Meaning |
 |---|---|---|
-| `folder` | — | folder with the photos; `~`, `%VAR%` and paths relative to `config.json` work. Setting it turns the page on (the repo ships an empty `slides/`) |
+| `folder` | — | folder with the photos; `~`, `%VAR%` and paths relative to `config.json` work. Setting it turns the page on (the repo ships a `slides/` with **example photos**) |
 | `enabled` | `true` when `folder` is set | set `false` to keep the folder configured but hide the page |
 | `interval_s` | `20` | seconds per image (minimum 2) |
 | `shuffle` | `false` | `true` = random order (a different order at each scan) |
@@ -113,6 +113,18 @@ photo still has — it restarts with every image.
 
 Putting a photo in `slides/` is all a user has to do; the page appears as soon as
 the folder has one image and disappears when it is empty.
+
+**Where the photos come from.** The photos of the presentation page are **the
+user's**: the project ships a few examples in `<project folder>/slides`, which is
+what `config.example.json` points at. Either copy the user's photos into that
+folder, or point `slides.folder` to one of theirs (e.g.
+`%USERPROFILE%\Pictures\Painel`) — an absolute path, `~`, `%VAR%` or a path
+relative to `config.json` all work. At startup the service logs one line:
+
+```
+slides: 4 photo(s) in C:\Users\me\Pictures\Painel
+slides: 6 photo(s) in C:\...\mcp-display-companion\slides (example photos that ship with the project)
+```
 
 `jpg/jpeg/png/webp/bmp/gif` are accepted, sorted by name (or shuffled). A file
 that cannot be read is skipped instead of freezing the slideshow. Preparing one

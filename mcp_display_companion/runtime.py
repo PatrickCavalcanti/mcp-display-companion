@@ -42,6 +42,17 @@ POLL_LENTO_S = SLOW_POLL_S
 WATCHDOG_LIMIT_S = 120
 WATCHDOG_LIMITE_S = WATCHDOG_LIMIT_S
 
+# Republishing reloads the View and sends the screen back to the first page, so
+# a rejected `update_view` is retried with backoff, and only a few times: when
+# another companion/agent owns the panel, fighting for it is an endless loop.
+REPUBLISH_BACKOFF_S = (2.0, 5.0, 15.0)
+REPUBLISH_MAX_ATTEMPTS = 2
+REPUBLISH_GIVE_UP_S = 300.0
+OTHER_OWNER_LOG = (
+    "outro agente/serviço está usando o painel; parando de republicar "
+    f"por {REPUBLISH_GIVE_UP_S:.0f}s"
+)
+
 
 def setup_log(path: Path) -> Callable[[str], None]:
     """Logs to stdout and file -- without console (pythonw), the file is critical."""
@@ -151,6 +162,10 @@ class Runtime:
         self._last_brightness = 0.0
         self._stream_started = False
         self._last_subscription = 0.0
+        # republish control: consecutive rejected republishes and the earliest
+        # time the next one is allowed (see REPUBLISH_* above)
+        self._republish_attempts = 0
+        self._republish_at = 0.0
 
 
 
@@ -257,6 +272,7 @@ class Runtime:
         for attempt in range(2):
             try:
                 self.client.update_view(data, presentation=presentation or self.presentation)
+                self._republish_attempts = 0
                 return True
             except RateLimited as exc:
                 self.log(f"{exc}; waiting 1s to retry")
@@ -272,14 +288,39 @@ class Runtime:
                 return False
         if not allow_republish:
             return False
+        if not self._may_republish():
+            return False
         try:
             self._publish()
             self._send(self.live.snapshot(), allow_republish=False)
             self.client.update_view(data, presentation=self.presentation)
+            self._republish_attempts = 0
             return True
+        except ToolError as exc:
+            self._republish_attempts += 1
+            index = min(self._republish_attempts, len(REPUBLISH_BACKOFF_S)) - 1
+            backoff = REPUBLISH_BACKOFF_S[index]
+            self._republish_at = self.clock() + backoff
+            self.log(
+                f"update_view rejected again ({exc}); not republishing for {backoff:.0f}s"
+            )
+            return False
         except PanelError as exc:
             self.log(f"republish failed: {exc}")
             return False
+
+    def _may_republish(self) -> bool:
+        """Backoff and give-up rule for republishing a rejected View."""
+        if self.clock() < self._republish_at:
+            return False
+        if self._republish_attempts >= REPUBLISH_MAX_ATTEMPTS:
+            # another companion or agent keeps taking the view: the screen would
+            # jump back to the first page every few seconds, so stop trying
+            self._republish_attempts = 0
+            self._republish_at = self.clock() + REPUBLISH_GIVE_UP_S
+            self.log(OTHER_OWNER_LOG)
+            return False
+        return True
 
     # ------------------------------------------------------------------ #
     # single loop tick

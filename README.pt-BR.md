@@ -64,6 +64,10 @@ python -m mcp_display_companion --print-view   # imprime o HTML que será public
 python -m mcp_display_companion                # roda o serviço (primeiro plano)
 ```
 
+As **fotos de exemplo** da página de apresentação estão em `<pasta do
+projeto>/slides`. Ponha as suas ali, ou aponte `slides.folder` no `config.json`
+para uma pasta sua (por exemplo `%USERPROFILE%\Pictures\Painel`).
+
 Depois instale como **serviço do sistema**, para sobreviver a terminal fechado,
 sessão de agente encerrada e queda do processo (no Windows é uma tarefa no logon:
 volta a cada login):
@@ -152,7 +156,22 @@ toques de horas atrás.
 
 ## Single instance / Instância única
 
-Ele se recusa a subir uma segunda cópia (trava de arquivo do sistema): dois companheiros no mesmo painel brigam pela View e a tela pisca.
+Ele se recusa a subir uma segunda cópia (trava de arquivo do sistema): dois companheiros no mesmo painel brigam pela View e a tela pisca. A trava é **por usuário**, na mesma pasta do token gravado pelo `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — não é por pasta, então um clone novo em outra pasta também é recusado. O segundo serviço registra no log o **pid e a pasta** do que já está rodando e sai sem publicar. Se outro agente/serviço toma a View, o serviço republica com recuo e depois para, registrando `outro agente/serviço está usando o painel`, em vez de resetar a tela em laço. `PANEL_COMPANION_LOCK` sobrescreve o caminho da trava.
+
+## O que dizer ao usuário depois de instalar
+
+Para o agente que faz a instalação, em palavras simples:
+
+1. **Onde o projeto ficou.** `C:\...\mcp-display-companion` (a pasta que você clonou).
+2. **As fotos que aparecem no painel são exemplos.** A pasta `slides/` dentro
+   do projeto vem com fotos de exemplo — paisagens que não têm nada a ver com a
+   vida do usuário.
+3. **Onde pôr as dele.** Copiar as fotos dele para `slides/`, ou melhor, apontar
+   `slides.folder` no `config.json` para uma pasta dele (ex.:
+   `%USERPROFILE%\Pictures\Painel`) e reiniciar o serviço. A página aparece
+   assim que a pasta tem uma imagem e some quando ela fica vazia.
+4. Reinicie o serviço depois de editar o `config.json`; a pasta de fotos não
+   precisa de reinício (ela é revarrida a cada `rescan_s`).
 
 ## Segurança
 

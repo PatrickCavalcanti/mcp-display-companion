@@ -68,6 +68,21 @@ def default_secrets_path() -> Path:
     return base / "mcp-display-companion" / "secrets.json"
 
 
+def default_slides_folder() -> Path:
+    """The example photos that ship with the project (`slides/` next to the package)."""
+    return Path(__file__).resolve().parent.parent / "slides"
+
+
+def default_lock_path() -> Path:
+    """Single instance lock: per user, next to the secrets file from --set-token.
+
+    The lock lives outside the repository on purpose: two clones of the
+    companion share the token (and therefore the panel), so they must also
+    share the lock, whatever folder each one was started from.
+    """
+    return default_secrets_path().parent / "companion.lock"
+
+
 def default_template() -> Path:
     """The template bundled with the package (the user can point to another)."""
     return Path(__file__).resolve().parent / "templates" / "painel.html"
@@ -230,10 +245,21 @@ def _validate_action_params(action_id: str, action_type: str, params: dict[str, 
         params["direction"] = direction
     elif action_type in {"folder", "app"}:
         require("path" if action_type == "folder" else "target", str)
+        if action_type == "folder" and "reuse_window" in params:
+            if not isinstance(params["reuse_window"], bool):
+                raise ConfigError(
+                    f"action {action_id}: folder.reuse_window must be true (navigate "
+                    "an open window) or false (always open a new window)"
+                )
     elif action_type == "url":
         url = require("url", str)
         if not re.match(r"^https?://", url):
             raise ConfigError(f"action {action_id}: url must start with http(s):// (got {url!r})")
+        if "new_window" in params and not isinstance(params["new_window"], bool):
+            raise ConfigError(
+                f"action {action_id}: url.new_window must be true (new window) "
+                "or false (tab in the browser already open)"
+            )
     elif action_type == "command":
         cmd = params.get("cmd")
         if isinstance(cmd, str):

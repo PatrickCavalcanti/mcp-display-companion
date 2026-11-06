@@ -37,6 +37,16 @@ MEDIA_KEYS = {
 VOLUME_KEYS = {"up": VK_VOLUME_UP, "down": VK_VOLUME_DOWN, "mute": VK_VOLUME_MUTE}
 
 NavigateFn = Callable[[Path], str]
+LaunchFn = Callable[[list[str]], bool]
+
+
+def _spawn(args: list[str]) -> bool:
+    """Starts a detached process: one list of arguments, never a shell line."""
+    kwargs: dict[str, Any] = {}
+    if os.name == "nt":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+    subprocess.Popen(args, **kwargs)
+    return True
 
 
 class Host:
@@ -44,8 +54,14 @@ class Host:
 
     name = "generic"
 
-    def __init__(self, log: Callable[[str], None] = lambda msg: None) -> None:
+    def __init__(
+        self,
+        log: Callable[[str], None] = lambda msg: None,
+        launch: LaunchFn | None = None,
+    ) -> None:
         self.log = log
+        # how a new window is started; injected in tests (nothing is launched)
+        self.launch: LaunchFn = launch or _spawn
 
     # -- input --------------------------------------------------------------
     def press_key(self, vk: int) -> bool:
@@ -60,16 +76,14 @@ class Host:
         return self.press_key(VOLUME_KEYS[direction])
 
     # -- opening targets ----------------------------------------------------
-    def open_folder(self, path: Path) -> bool:
+    def open_folder(self, path: Path, reuse_window: bool = False) -> bool:
+        """Always a new window of the default file manager (Windows: Win+E)."""
         import sys
 
+        if reuse_window:
+            self.log(f"window reuse is not available on this system; opening a new one: {path}")
         opener = "open" if sys.platform == "darwin" else "xdg-open"
-        try:
-            subprocess.Popen([opener, str(path)])
-            return True
-        except OSError as exc:
-            self.log(f"could not open {path}: {exc}")
-            return False
+        return self._launch([opener, str(path)], f"folder {path}")
 
     def open_app(self, target: str) -> bool:
         try:
@@ -79,13 +93,21 @@ class Host:
             self.log(f"could not open {target}: {exc}")
             return False
 
-    def open_url(self, url: str, browser: str = "", new_window: bool = False) -> bool:
+    def open_url(self, url: str, browser: str = "", new_window: bool = True) -> bool:
         try:
             import webbrowser
 
-            return bool(webbrowser.open(url, new=1 if new_window else 0))
+            opener = webbrowser.open_new if new_window else webbrowser.open
+            return bool(opener(url))
         except Exception as exc:  # noqa: BLE001 - best effort
             self.log(f"could not open {url}: {exc}")
+            return False
+
+    def _launch(self, args: list[str], what: str = "") -> bool:
+        try:
+            return bool(self.launch(args))
+        except OSError as exc:
+            self.log(f"could not open {what or args[0]}: {exc}")
             return False
 
     def run_command(self, cmd: list[str], cwd: Path | None = None, detached: bool = False) -> bool:
@@ -114,9 +136,17 @@ class WindowsHost(Host):
         self,
         run_async: Callable[[Any], Any] | None = None,
         log: Callable[[str], None] = lambda msg: None,
+        launch: LaunchFn | None = None,
+        allow_foreground: Callable[[], bool] | None = None,
+        browser_lookup: Callable[[], str | None] | None = None,
     ) -> None:
-        super().__init__(log=log)
+        super().__init__(log=log, launch=launch)
         self.run_async = run_async or _run_async_oneshot
+        # the service runs in the background: without this the new window opens
+        # behind whatever is on screen and the user does not see it
+        self.allow_foreground = allow_foreground or _allow_set_foreground_window
+        # default browser comes from the registry (UrlAssociations\https)
+        self.browser_lookup = browser_lookup or default_browser_exe
         self._navigating = False
 
     # -- input --------------------------------------------------------------
@@ -159,7 +189,17 @@ class WindowsHost(Host):
         return self.press_key(MEDIA_KEYS[command])
 
     # -- opening folders ----------------------------------------------------
-    def open_folder(self, path: Path) -> bool:
+    def open_folder(self, path: Path, reuse_window: bool = False) -> bool:
+        """New Explorer window by default -- like Win+E.
+
+        Navigating an existing window pulls the user out of where they were, so
+        it is only done when the config asks for it (`"reuse_window": true`).
+        """
+        if not reuse_window:
+            return self._launch_foreground(["explorer.exe", str(path)], f"folder {path}")
+        return self._navigate_existing_window(path)
+
+    def _navigate_existing_window(self, path: Path) -> bool:
         """Navigates existing Explorer window (COM) with timeout.
 
         If Shell COM does not respond in 4s, falls back to `explorer.exe`:
@@ -194,14 +234,14 @@ class WindowsHost(Host):
         if thread.is_alive():
             abandoned["yes"] = True
             self.log(f"Shell COM timed out after 4s; opening via explorer.exe: {path}")
-            return self.run_command(["explorer.exe", str(path)])
+            return self._launch_foreground(["explorer.exe", str(path)], f"folder {path}")
 
         res = box.get("r", "")
         if res == "navigated":
             self.log(f"folder opened in existing window: {path}")
             return True
         self.log(f"Shell COM notice ({res}); opening via explorer.exe")
-        return self.run_command(["explorer.exe", str(path)])
+        return self._launch_foreground(["explorer.exe", str(path)], f"folder {path}")
 
     def open_app(self, target: str) -> bool:
         try:
@@ -211,17 +251,26 @@ class WindowsHost(Host):
             self.log(f"could not open {target} ({exc}); trying via shell")
             return self.run_command(["cmd", "/c", "start", "", target])
 
-    def open_url(self, url: str, browser: str = "", new_window: bool = False) -> bool:
-        if browser:
-            exe = _find_browser(browser)
-            if exe:
-                args = [exe]
-                if new_window:
-                    args.append("--new-window")
-                args.append(url)
-                return self.run_command(args)
-            self.log(f"browser {browser!r} not found; using default")
+    def open_url(self, url: str, browser: str = "", new_window: bool = True) -> bool:
+        exe = _find_browser(browser) if browser else None
+        if browser and not exe:
+            self.log(f"browser {browser!r} not found; using the default one")
+        if not exe:
+            exe = self.browser_lookup()
+        if exe:
+            args = new_window_command(exe, url, new_window)
+            if args:
+                return self._launch_foreground(args, f"url {url}")
+            self.log(f"unknown browser {exe!r}; opening {url} through the shell")
         return super().open_url(url, browser, new_window)
+
+    def _launch_foreground(self, args: list[str], what: str = "") -> bool:
+        """Lets the new process take the focus before starting it."""
+        try:
+            self.allow_foreground()
+        except Exception as exc:  # noqa: BLE001 - focus is best effort
+            self.log(f"could not hand the foreground to the new window: {exc}")
+        return self._launch(args, what)
 
     # -- media (metadata) ---------------------------------------------------
     def media_info(self, cover: bool = True, cover_px: int = 160) -> dict[str, Any] | None:
@@ -318,6 +367,99 @@ def _navigate_with(path: Path) -> str:
             pass
 
 
+# how each browser family asks for a new window
+NEW_WINDOW_FLAGS = {"chromium": "--new-window", "firefox": "-new-window"}
+
+CHROMIUM_NAMES = {
+    "chrome", "msedge", "brave", "chromium", "vivaldi", "opera",
+    "opera_gx", "thorium", "yandex", "arc",
+}
+FIREFOX_NAMES = {"firefox", "firefoxdeveloperedition", "waterfox", "librewolf"}
+
+
+def browser_family(exe: str) -> str | None:
+    """`chromium`, `firefox`, or `None` when the flag is not known."""
+    name = Path(exe).stem.lower()
+    if name in CHROMIUM_NAMES:
+        return "chromium"
+    if name in FIREFOX_NAMES:
+        return "firefox"
+    return None
+
+
+def new_window_command(exe: str, url: str, new_window: bool = True) -> list[str] | None:
+    """Command line for `url` in a new window of `exe`; `None` = unknown browser."""
+    args = [exe]
+    if new_window:
+        flag = NEW_WINDOW_FLAGS.get(browser_family(exe) or "")
+        if flag is None:
+            return None
+        args.append(flag)
+    args.append(url)
+    return args
+
+
+def _registry_value(root: Any, subkey: str, name: str) -> str | None:
+    try:
+        import winreg
+
+        with winreg.OpenKey(root, subkey) as key:
+            value, _ = winreg.QueryValueEx(key, name)
+    except OSError:
+        return None
+    except ImportError:
+        return None
+    return str(value) if value else None
+
+
+def _exe_from_command(command: str) -> str | None:
+    """`"C:\\...\\chrome.exe" --single-argument %1` -> the executable path."""
+    text = command.strip()
+    if not text:
+        return None
+    if text.startswith('"'):
+        end = text.find('"', 1)
+        if end < 0:
+            return None
+        return text[1:end] or None
+    return text.split()[0]
+
+
+def default_browser_exe() -> str | None:
+    """Executable of the default browser, read from the registry.
+
+    `HKCU\\...\\UrlAssociations\\https\\UserChoice\\ProgId` gives something like
+    `MSEdgeHTM`; `HKCR\\<ProgId>\\shell\\open\\command` gives the command line.
+    """
+    try:
+        import winreg
+    except ImportError:  # not Windows
+        return None
+
+    prog_id = _registry_value(
+        winreg.HKEY_CURRENT_USER,
+        r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
+        "ProgId",
+    )
+    if not prog_id:
+        return None
+    command = _registry_value(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command", "")
+    if not command:
+        return None
+    return _exe_from_command(command)
+
+
+def _allow_set_foreground_window() -> bool:
+    """Lets the window launched next take the foreground (Windows only)."""
+    try:
+        import ctypes
+
+        ASFW_ANY = -1
+        return bool(ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY))
+    except Exception:  # noqa: BLE001 - not Windows, or no user32
+        return False
+
+
 def _find_browser(name: str) -> str | None:
     candidates = {
         "chrome": [
@@ -328,7 +470,14 @@ def _find_browser(name: str) -> str | None:
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         ],
-        "firefox": [r"C:\Program Files\Mozilla Firefox\firefox.exe"],
+        "firefox": [
+            r"C:\Program Files\Mozilla Firefox\firefox.exe",
+            r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+        ],
+        "brave": [
+            r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+            r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+        ],
     }.get(name.lower(), [])
     for candidate in candidates:
         if Path(candidate).exists():

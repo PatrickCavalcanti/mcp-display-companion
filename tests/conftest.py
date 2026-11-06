@@ -18,7 +18,7 @@ class FakeHost:
     def media(self, command): return self._record('media', command)
     def press_key(self, vk): return self._record('press_key', vk)
     def volume(self, direction): return self._record('volume', direction)
-    def open_folder(self, path): return self._record('open_folder', path)
+    def open_folder(self, path, reuse_window=False): return self._record('open_folder', path, reuse_window=reuse_window)
     def open_app(self, target): return self._record('open_app', target)
     def open_url(self, url, **kwargs): return self._record('open_url', url, **kwargs)
     def run_command(self, cmd, **kwargs): return self._record('run_command', cmd, **kwargs)

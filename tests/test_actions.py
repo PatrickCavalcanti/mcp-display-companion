@@ -29,7 +29,17 @@ def test_folder(make_config, host, tmp_path, monkeypatch, exists):
     if exists: path.mkdir()
     result = runner(make_config, host, 'folder', {'path': '%USERPROFILE%/folder'}).run('pc_action')
     assert result.ok == exists
-    assert host.calls == ([('open_folder', (path,), {})] if exists else [])
+    assert host.calls == ([('open_folder', (path,), {'reuse_window': False})] if exists else [])
+
+
+def test_folder_reuse_window_is_opt_in(make_config, host, tmp_path, monkeypatch):
+    """Navigating an open Explorer window is the worst case: only when asked."""
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    path = tmp_path / 'folder'
+    path.mkdir()
+    params = {'path': '%USERPROFILE%/folder', 'reuse_window': True}
+    assert runner(make_config, host, 'folder', params).run('pc_action').ok
+    assert host.calls == [('open_folder', (path,), {'reuse_window': True})]
 
 
 @pytest.mark.parametrize('target', ['spotify:', '$HOME/app.exe', '%USERPROFILE%/app.exe'])
@@ -45,6 +55,18 @@ def test_url_options(make_config, host):
     params = {'url': 'https://example.test', 'browser': 'firefox', 'new_window': True}
     assert runner(make_config, host, 'url', params).run('pc_action').ok
     assert host.calls == [('open_url', ('https://example.test',), {'browser': 'firefox', 'new_window': True})]
+
+
+def test_url_opens_new_window_by_default(make_config, host):
+    """A tab in a browser already open stays behind other windows."""
+    assert runner(make_config, host, 'url', {'url': 'https://example.test'}).run('pc_action').ok
+    assert host.calls == [('open_url', ('https://example.test',), {'browser': '', 'new_window': True})]
+
+
+def test_url_tab_only_when_asked(make_config, host):
+    params = {'url': 'https://example.test', 'new_window': False}
+    assert runner(make_config, host, 'url', params).run('pc_action').ok
+    assert host.calls == [('open_url', ('https://example.test',), {'browser': '', 'new_window': False})]
 
 
 @pytest.mark.parametrize('with_cwd,detached', [(False, None), (True, False)])

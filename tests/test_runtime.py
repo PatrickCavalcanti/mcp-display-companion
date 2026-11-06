@@ -187,6 +187,51 @@ def test_rate_limited_delivery_is_retried(runtime):
     assert client.updates[-1] == ({'vivo': 1}, 'screen-1')
 
 
+# --------------------------------------------------------------------------- #
+# another companion owns the panel: republish with backoff, then stop
+# --------------------------------------------------------------------------- #
+def test_rejected_republish_backs_off_then_gives_up(runtime):
+    from mcp_display_companion.runtime import REPUBLISH_MAX_ATTEMPTS
+
+    rt, client, _, _, now = runtime
+    rt._connect()
+    messages = []
+    rt.log = messages.append
+    client.fail_updates = 10 ** 6
+    screens = len(client.shows)
+
+    for _ in range(6):
+        assert rt._send({'vivo': 1}) is False
+        now[0] += 6  # long enough for every backoff step
+
+    # it tried a couple of times and stopped instead of looping every tick
+    assert len(client.shows) - screens == REPUBLISH_MAX_ATTEMPTS
+    assert any('outro agente/serviço está usando o painel' in m for m in messages)
+
+    # after the give-up window it may try again -- once, not on every tick
+    now[0] += 301
+    screens = len(client.shows)
+    assert rt._send({'vivo': 2}) is False
+    assert len(client.shows) - screens == 1
+    assert rt._send({'vivo': 3}) is False
+    assert len(client.shows) - screens == 1
+
+
+def test_republish_waits_for_the_backoff(runtime):
+    rt, client, _, _, now = runtime
+    rt._connect()
+    client.fail_updates = 10 ** 6
+    screens = len(client.shows)
+
+    assert rt._send({'vivo': 2}) is False  # rejected, one republish attempt fails
+    assert len(client.shows) == screens + 1
+    assert rt._send({'vivo': 3}) is False  # inside the backoff window
+    assert len(client.shows) == screens + 1
+    now[0] += 2
+    assert rt._send({'vivo': 4}) is False
+    assert len(client.shows) == screens + 2
+
+
 def test_duplicate_event_ids_in_one_batch_run_once(runtime, touch):
     rt, client, host, _, _ = runtime
     rt.cursor = 41

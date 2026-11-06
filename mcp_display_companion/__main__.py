@@ -12,6 +12,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Callable
 
 from . import config as config_module
 from . import view
@@ -44,6 +45,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="save token to secrets file (outside repository) and exit")
     parser.add_argument("--version", action="version", version=f"mcp-display-companion {__version__}")
     return parser.parse_args(argv)
+
+
+def _announce_slides(cfg: config_module.Config, log: Callable[[str], None]) -> None:
+    """Startup line: where the slideshow photos come from.
+
+    The project ships example photos in `slides/`: whoever installs must know
+    they are samples and where to put their own.
+    """
+    if not cfg.slides.enabled:
+        log("slides: disabled")
+        return
+    from .slideshow import SlideDeck
+
+    deck = SlideDeck(cfg.slides)
+    deck.has_images()  # scans the folder
+    folder = deck.folder.resolve()
+    count = len(deck._files)
+    example = ""
+    if folder == config_module.default_slides_folder().resolve():
+        example = " (example photos that ship with the project)"
+    log(f"slides: {count} photo(s) in {folder}{example}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -98,15 +120,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     log = setup_log(cfg.loop.log_file)
+    _announce_slides(cfg, log)
 
-    # Single instance: two companions connected to same panel conflict over View.
-    lock_path = Path(os.environ.get("PANEL_COMPANION_LOCK") or (cfg.base_dir / "companion.lock"))
-    lock = InstanceLock(lock_path)
+    # Single instance per user, not per folder: two companions on the same panel
+    # conflict over the View, and a new clone in another folder must not run
+    # alongside the old one (the token is shared outside the repository).
+    lock_path = Path(
+        os.environ.get("PANEL_COMPANION_LOCK") or config_module.default_lock_path()
+    )
+    lock = InstanceLock(
+        lock_path,
+        owner={"folder": str(cfg.base_dir), "config": str(Path(args.config).resolve())},
+    )
     if not lock.acquire():
-        owner = lock.owner_pid()
         log(
-            f"another companion is already running with this configuration "
-            f"(pid {owner}, lock {lock_path}); exiting without publishing"
+            f"another companion is already running ({lock.describe_owner()}; "
+            f"lock {lock_path}); exiting without publishing"
         )
         return 0
     try:

@@ -62,6 +62,10 @@ python -m mcp_display_companion --print-view   # prints the HTML that will be pu
 python -m mcp_display_companion               # runs the service (foreground)
 ```
 
+The **example photos** of the presentation page are in `<project folder>/slides`.
+Put yours there, or point `slides.folder` in `config.json` to a folder of your own
+(for example `%USERPROFILE%\Pictures\Painel`).
+
 Then install it as a **system service** so it survives a closed terminal, a
 finished agent session and a crash (on Windows it is a logon-triggered task: it
 comes back at every logon):
@@ -151,7 +155,21 @@ touches from hours ago.
 
 ## Single instance / Instância única
 
-It refuses to start a second copy (OS file lock): two companions on one panel fight over the View and the screen flickers.
+It refuses to start a second copy (OS file lock): two companions on one panel fight over the View and the screen flickers. The lock is **per user**, next to the token saved by `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — not per folder, so a second clone in another folder is refused too. The second start logs the **pid and folder** of the running one and exits without publishing. If the panel's View is taken by someone else, the service republishes with backoff and then stops, logging `outro agente/serviço está usando o painel`, instead of resetting the screen in a loop. `PANEL_COMPANION_LOCK` overrides the lock path.
+
+## What to tell the user after installing
+
+For the agent that does the install, in plain words:
+
+1. **Where the project is.** `C:\...\mcp-display-companion` (the folder you cloned).
+2. **The photos on the panel are examples.** `slides/` inside that folder ships
+   with sample photos — landscapes that have nothing to do with the user's life.
+3. **Where to put theirs.** Copy their photos into `slides/`, or better, point
+   `slides.folder` in `config.json` to a folder of theirs (e.g.
+   `%USERPROFILE%\Pictures\Painel`) and restart the service. The page shows up
+   as soon as the folder has one image and disappears when it is empty.
+4. Restart the service after editing `config.json`; the photos folder does not
+   need a restart (it rescans every `rescan_s`).
 
 ## Security notes
 

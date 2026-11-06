@@ -157,6 +157,23 @@ touches from hours ago.
 
 It refuses to start a second copy (OS file lock): two companions on one panel fight over the View and the screen flickers. The lock is **per user**, next to the token saved by `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — not per folder, so a second clone in another folder is refused too. The second start logs the **pid and folder** of the running one and exits without publishing. If the panel's View is taken by someone else, the service republishes with backoff and then stops, logging `outro agente/serviço está usando o painel`, instead of resetting the screen in a loop. `PANEL_COMPANION_LOCK` overrides the lock path.
 
+## Upgrading from an earlier version
+
+- **Opening a browser and opening a folder now use a new window** — a `url`
+  action behaves like `--new-window` and a `folder` action like Win+E, instead of
+  reusing the window already open. For the old behavior, set
+  `"new_window": false` on the `url` action, or `"reuse_window": true` on the
+  `folder` action ([docs/actions.md](docs/actions.md)).
+- **The single instance lock is per user now** (next to the token), so a second
+  clone in another folder no longer starts alongside the first.
+
+After `git pull`, **re-run the installer** instead of only restarting the task:
+`powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1` (Windows)
+or `./scripts/install-service.sh` (macOS/Linux). It is idempotent and installs
+nothing — but it stops the old supervisor **and its child**. Restarting only the
+task can leave the old child alive, and that child holds the *old* per-folder
+lock, which the new version no longer looks at.
+
 ## What to tell the user after installing
 
 For the agent that does the install, in plain words:

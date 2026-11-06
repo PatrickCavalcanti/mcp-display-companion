@@ -88,6 +88,22 @@ def test_exe_from_registry_command(command, expected):
     assert _exe_from_command(command) == expected
 
 
+@pytest.mark.parametrize("command,expected", [
+    # unquoted path with a space: cutting at the first space gives "C:\Program"
+    (r'C:\Program Files\App\browser.exe %1', r'C:\Program Files\App\browser.exe'),
+    (r'C:\Program Files\App\BROWSER.EXE --single-argument %1',
+     r'C:\Program Files\App\BROWSER.EXE'),
+    (r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe %1 --flag',
+     r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'),
+    # no space at all keeps working
+    (r'C:\Apps\chrome.exe -- "%1"', r'C:\Apps\chrome.exe'),
+    # no .exe in sight: still the first token
+    (r'C:\Apps\run %1', r'C:\Apps\run'),
+])
+def test_exe_from_unquoted_command_with_space_in_the_path(command, expected):
+    assert _exe_from_command(command) == expected
+
+
 def test_default_browser_reads_url_association(monkeypatch):
     pytest.importorskip("winreg")
 

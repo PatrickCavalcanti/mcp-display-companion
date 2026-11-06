@@ -41,9 +41,16 @@ function Get-PanelPids {
         $queue.Enqueue([int]$root.ProcessId)
     }
     # the companion writes its own PID to companion.pid: an orphan child of a
-    # dead supervisor cannot be found via the command line
-    $pidFile = Join-Path $base "companion.pid"
-    if (Test-Path $pidFile) {
+    # dead supervisor cannot be found via the command line. The lock is per
+    # user, so the pid now lives next to the token (%APPDATA%) and not only in
+    # the repository folder -- look in both, and keep the old location because
+    # an install from before the change still writes it there.
+    $pidFiles = @(Join-Path $base "companion.pid")
+    if ($env:APPDATA) {
+        $pidFiles += Join-Path $env:APPDATA "mcp-display-companion\companion.pid"
+    }
+    foreach ($pidFile in $pidFiles) {
+        if (-not (Test-Path $pidFile)) { continue }
         $text = (Get-Content $pidFile -Raw -ErrorAction SilentlyContinue)
         if ($text -and $text.Trim() -match '^[0-9]+$') {
             $companion = $all | Where-Object { $_.ProcessId -eq [int]$text.Trim() -and $_.Name -match '^pythonw?\.exe$' }

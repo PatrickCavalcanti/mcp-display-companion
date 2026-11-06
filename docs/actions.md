@@ -7,6 +7,12 @@ action (`"command": "next"`) or grouped in `"params": {...}` — both work, and
 
 Nothing outside this list runs: an unknown id is logged and ignored.
 
+> **Changed in this version:** `url` and `folder` open a **new window** by
+> default. For the old behavior — navigating the window already open — set
+> `"new_window": false` on the `url` action or `"reuse_window": true` on the
+> `folder` action. After `git pull`, re-run the installer so the new code is
+> what is running (see [Upgrading](../README.md#upgrading-from-an-earlier-version)).
+
 ## `media` — playback transport
 
 ```json

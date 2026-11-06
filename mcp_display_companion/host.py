@@ -413,7 +413,12 @@ def _registry_value(root: Any, subkey: str, name: str) -> str | None:
 
 
 def _exe_from_command(command: str) -> str | None:
-    """`"C:\\...\\chrome.exe" --single-argument %1` -> the executable path."""
+    """`"C:\\...\\chrome.exe" --single-argument %1` -> the executable path.
+
+    Without quotes the path may still contain spaces (`C:\\Program Files\\...`),
+    so the cut is at the end of `.exe`, not at the first space -- cutting at the
+    space would yield `C:\\Program` and the launch would fail.
+    """
     text = command.strip()
     if not text:
         return None
@@ -422,6 +427,9 @@ def _exe_from_command(command: str) -> str | None:
         if end < 0:
             return None
         return text[1:end] or None
+    end = text.lower().find(".exe")
+    if end >= 0:
+        return text[: end + len(".exe")].strip() or None
     return text.split()[0]
 
 

@@ -158,6 +158,23 @@ toques de horas atrás.
 
 Ele se recusa a subir uma segunda cópia (trava de arquivo do sistema): dois companheiros no mesmo painel brigam pela View e a tela pisca. A trava é **por usuário**, na mesma pasta do token gravado pelo `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — não é por pasta, então um clone novo em outra pasta também é recusado. O segundo serviço registra no log o **pid e a pasta** do que já está rodando e sai sem publicar. Se outro agente/serviço toma a View, o serviço republica com recuo e depois para, registrando `outro agente/serviço está usando o painel`, em vez de resetar a tela em laço. `PANEL_COMPANION_LOCK` sobrescreve o caminho da trava.
 
+## Atualizando de uma versão anterior
+
+- **Abrir navegador e abrir pasta agora usam janela nova** — uma ação `url` se
+  comporta como `--new-window` e uma ação `folder` como Win+E, em vez de reusar
+  a janela já aberta. Para o comportamento antigo, use `"new_window": false` na
+  ação `url` ou `"reuse_window": true` na ação `folder`
+  ([docs/actions.md](docs/actions.md)).
+- **A trava de instância única agora é por usuário** (ao lado do token), então
+  um segundo clone em outra pasta não sobe mais junto com o primeiro.
+
+Depois do `git pull`, **rode o instalador de novo** em vez de só reiniciar a
+tarefa: `powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1`
+(Windows) ou `./scripts/install-service.sh` (macOS/Linux). Ele é idempotente e
+não instala nada — mas para o supervisor antigo **e o filho dele**. Reiniciar só
+a tarefa pode deixar o filho antigo vivo, e esse filho segura a trava *antiga*,
+por pasta, que a versão nova não consulta mais.
+
 ## O que dizer ao usuário depois de instalar
 
 Para o agente que faz a instalação, em palavras simples:

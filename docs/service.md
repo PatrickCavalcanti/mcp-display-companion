@@ -89,8 +89,16 @@ lock is **per user**, in the same folder as the token saved by `--set-token`
 `PANEL_COMPANION_LOCK` overrides the path. `companion.owner.json` records who
 holds it (pid and folder), and a second start logs
 `another companion is already running (pid …, folder …)`
-and exits without publishing. The Windows installer reads `companion.pid` so it
-can kill an orphaned child whose supervisor is already gone.
+and exits without publishing. The Windows installer reads `companion.pid` — in
+the repository folder *and* next to the token — so it can kill an orphaned child
+whose supervisor is already gone.
+
+The **supervisor** keeps a lock of its own,
+`…/mcp-display-companion/supervisor/companion.lock`, so a second supervisor
+started from another folder logs `another supervisor is already active` and
+exits even while its child is between restarts. It lives in a subfolder on
+purpose: `InstanceLock` writes `companion.pid` beside its lock file, and that
+pid has to stay the companion's.
 
 If the panel keeps rejecting `update_view` (`presentation não é a sua View aberta
 agora`), the service republishes with backoff — a couple of attempts, spaced out

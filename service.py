@@ -18,12 +18,38 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
+from mcp_display_companion import config as config_module
 from mcp_display_companion.instance import InstanceLock
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE, "service.log")
 DEFAULT_CONFIG = os.environ.get("PANEL_COMPANION_CONFIG", "config.json")
+
+
+def companion_lock_path() -> Path:
+    """Lock the service will take: the same one `python -m mcp_display_companion`
+    uses -- per user, unless `PANEL_COMPANION_LOCK` says otherwise.
+
+    A lock per folder (next to `config.json`) would let a second clone, in
+    another folder, run alongside this one; the token is shared, so both would
+    publish to the same panel and fight over the View.
+    """
+    from_env = os.environ.get("PANEL_COMPANION_LOCK")
+    return Path(from_env) if from_env else config_module.default_lock_path()
+
+
+def supervisor_lock_path(lock_path: Path) -> Path:
+    """The supervisor's own lock, in a folder of its own.
+
+    It cannot sit beside the companion lock: `InstanceLock` writes
+    `companion.pid` next to the lock file, and that pid is the companion's --
+    the installer reads it to stop the right process. With a lock of its own the
+    supervisor is seen by a second supervisor started from another folder, even
+    while its child is between restarts.
+    """
+    return lock_path.parent / "supervisor" / "companion.lock"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -56,9 +82,28 @@ def main(argv: list[str] | None = None) -> int:
     config = parse_args(argv).config
     log("========== supervisor started ==========")
     log(f"config: {config}")
+    lock_path = companion_lock_path()
+    log(f"lock: {lock_path}")
+    # One supervisor per user: a second one, started from another folder, would
+    # only add a second child competing for the same panel.
+    supervisor_lock = InstanceLock(
+        supervisor_lock_path(lock_path), owner={"folder": BASE, "config": config}
+    )
+    if not supervisor_lock.acquire():
+        log(
+            f"another supervisor is already active ({supervisor_lock.describe_owner()}); "
+            "this supervisor exits without starting a second one"
+        )
+        return 0
+    try:
+        return supervise(config, lock_path)
+    finally:
+        supervisor_lock.release()
+
+
+def supervise(config: str, lock_path: Path) -> int:
     # The child holds the lock file while alive; if it is already locked, another
     # companion is publishing to the panel and this supervisor has nothing to do.
-    lock_path = os.path.join(BASE, "companion.lock")
     probe = InstanceLock(lock_path)
     if not probe.acquire():
         log(
@@ -74,7 +119,9 @@ def main(argv: list[str] | None = None) -> int:
         log(f"starting mcp_display_companion (parent {os.getpid()})")
         code: int | None = None
         try:
-            env = dict(os.environ, PANEL_COMPANION_LOCK=lock_path)
+            # The child resolves the lock itself (per user, or the path in
+            # PANEL_COMPANION_LOCK); the supervisor must not force its own on it.
+            env = dict(os.environ)
             proc = subprocess.Popen(
                 [sys.executable, "-m", "mcp_display_companion", "-c", config],
                 cwd=BASE,

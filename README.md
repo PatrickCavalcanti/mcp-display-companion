@@ -124,6 +124,16 @@ sends it as a `data:` URL — one image per `interval_s`, prepared in a backgrou
 thread so the buttons never wait. Drop a new photo in the folder and it shows up
 without restarting anything.
 
+### Held upright (portrait)
+
+The design is drawn for the panel **lying on its side** (692×360). Upright, the
+same screen rearranges itself into a column: big clock on top, weather and the
+featured button stacked, shortcuts in two wide columns, smaller switches, and
+the clock over the photos bound to the screen width. That is one
+`@media (orientation:portrait)` block in `templates/painel.html`; the landscape
+design does not change. A landscape photo on an upright screen is cropped from
+the centre — for the presentation, prefer photos in that shape.
+
 ### Rest mode (page 3)
 
 The panel is a wall display: a switch on the **settings page** turns rest mode on

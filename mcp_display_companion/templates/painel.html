@@ -30,7 +30,11 @@ body::before{content:"";position:fixed;inset:-25%;z-index:0;pointer-events:none;
 #trilho{display:flex;width:calc(100% * var(--paginas,2));height:100%;will-change:transform}
 
 .pagina{width:calc(100% / var(--paginas,2));height:100%;box-sizing:border-box;
-  padding:16px 24px;display:grid;min-height:0}
+  padding:16px 24px;display:grid;min-height:0;overflow:hidden}
+/* a grid column is `auto` by default, so a card whose content is wider than
+   its share of the screen pushes the track sideways instead of wrapping:
+   `min-width:0` lets the columns shrink to the viewport */
+.pagina>*{min-width:0;min-height:0}
 
 /* PAGE 1 - the layout adapts to what exists: clock, weather, featured button */
 #p1{grid-gap:16px;grid-template-columns:1.2fr 1fr;grid-template-rows:1.1fr 1fr;
@@ -273,6 +277,58 @@ body.descanso .icone{color:#fff!important}
 .ponto i{display:block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);transition:background .2s,width .2s}
 .ponto.on i{background:var(--acc2);width:22px;border-radius:4px}
 .uma-pagina #pontos{display:none}
+
+/* ------------------------------------------------------------------
+   PÉ (portrait): the same screen, rearranged as a column.
+   The design is drawn for the panel lying on its side (692x360); held
+   upright the two columns squeeze into 360 px and every card overflows.
+   Here each page becomes a single column, the shortcut grid turns into
+   two wide columns, and the switches shrink so the label keeps its line.
+   Landscape keeps the rules above untouched.
+   ------------------------------------------------------------------ */
+@media (orientation:portrait){
+  .pagina{padding:14px 16px;grid-gap:12px}
+
+  /* PAGE 1: clock on top (it is the hero), weather, then the featured button */
+  #p1{grid-template-columns:1fr;grid-template-rows:1.9fr .95fr 1fr;
+    grid-template-areas:"relogio" "clima" "botao"}
+  #p1.com-clima:not(.com-destaque){grid-template-rows:2.4fr 1fr;grid-template-areas:"relogio" "clima"}
+  #p1:not(.com-clima).com-destaque{grid-template-rows:2.1fr 1fr;grid-template-areas:"relogio" "botao"}
+  #p1:not(.com-clima):not(.com-destaque){grid-template-rows:1fr;grid-template-areas:"relogio"}
+  #p1:not(.com-relogio){grid-template-rows:1fr 1fr;grid-template-areas:"clima" "botao"}
+  #p1:not(.com-relogio):not(.com-clima){grid-template-rows:1fr;grid-template-areas:"botao"}
+  .relogio{padding:20px 22px;border-radius:20px}
+  .card{padding:16px 18px;border-radius:20px}
+  #icone{width:40px;height:40px;margin-right:12px}
+  #temp{font-size:clamp(32px,9vmin,44px)}
+  .btn-midia-banner{padding:12px 18px;border-radius:18px}
+  .btn-midia-banner .ico-midia{width:44px;height:44px;margin-right:12px}
+  .btn-midia-banner .ico-midia svg{width:22px;height:22px}
+  .btn-midia-banner #faixa{font-size:16px}
+
+  /* PAGE 2: 5 columns do not fit in 360 px - two wide columns instead */
+  #grid-atalhos{grid-template-columns:repeat(2,minmax(0,1fr));grid-gap:10px;
+    grid-auto-rows:minmax(0,1fr)}
+
+  /* PAGE 3: smaller switches, so the label is not squeezed into 3 letters.
+     The rows keep a fixed height (168 px, bigger than the landscape 132) and
+     the block centres in the page: filling 620 px would give two empty cards. */
+  #config-lista{grid-gap:12px;grid-auto-rows:minmax(0,168px);align-content:center}
+  .config-item{min-height:104px;padding:16px 18px;gap:16px;border-radius:20px}
+  .config-item .cfg-txt b{font-size:20px}
+  .config-item .cfg-txt small{font-size:13px}
+  .switch{width:84px;height:48px;border-radius:24px}
+  .switch i{width:36px;height:36px;left:6px;top:6px}
+  .switch.on i{transform:translateX(36px)}
+
+  /* PAGE 0: the photo takes the whole screen; the clock over it follows
+     the narrower axis (26vw) instead of 30vh, which overflowed sideways */
+  #relogio-slide{padding:0 22px 56px}
+  #hora-slide{font-size:clamp(44px,min(30vh,26vw),170px)}
+  #data-slide{font-size:14px;margin-top:6px}
+  #slide-progresso{top:14px;right:16px;width:30px;height:30px}
+  #slide-progresso svg{width:22px;height:22px}
+}
 </style>
 </head>
 <body>

@@ -126,6 +126,15 @@ e manda como `data:` URL — uma imagem por `interval_s`, preparada numa thread
 para os botões nunca esperarem. Jogar foto nova na pasta aparece sem reiniciar
 nada.
 
+### A tela de pé (retrato)
+
+O desenho é feito para o painel **deitado** (692×360). De pé, a mesma tela se
+reorganiza em coluna: relógio grande em cima, clima e botão em destaque
+empilhados, atalhos em duas colunas largas, interruptores menores e a hora sobre
+as fotos presa à largura da tela. É um bloco `@media (orientation:portrait)` em
+`templates/painel.html`; o desenho deitado não muda. Foto deitada em tela de pé
+é recortada no centro — para a apresentação, prefira fotos nesse formato.
+
 ### Modo descanso (página 3)
 
 O painel fica na parede: um interruptor na **página de ajustes** liga e desliga o

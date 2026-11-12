@@ -190,14 +190,20 @@ to the log.
 
 > **Warning:** while the button is on, the keys are physically held down in the
 > system — every other key you type is combined with them. Tap the button again
-> to release them. The service also releases everything it holds when it stops.
-> If the service is killed abruptly the keys may stay stuck until the service
-> starts again (it releases them at startup, see below); or press and release
-> each of them on the keyboard to free them.
+> to release them. The service releases everything it holds when it stops
+> normally, when the panel goes out of reach (the phone is off or the connection
+> drops), and at the next start (see below).
+>
+> It does **not** release them when the process is killed by force. That includes
+> stopping, reinstalling or removing the service with the installer
+> (`scripts/install-service.ps1` uses `Stop-Process -Force`) and the supervisor's
+> `terminate()` in `service.py`. Then the keys stay down until you press and
+> release each of them on the keyboard, or start the service again. Release the
+> buttons on the panel before you remove the service.
 
 The service tells the screen whether the keys are held after each tap, and sends
 the state of every `hotkey_toggle` button again whenever it reconnects to the
-screen. The bundled screen draws a held button with the accent border and tint
+panel or publishes the screen again. The bundled screen draws a held button with the accent border and tint
 (class `retido`, `aria-pressed="true"`); it does not change the icon by itself, so
 pick the icon you want in the config. The icons `mic` and `mic_off` are available
 for this kind of button.

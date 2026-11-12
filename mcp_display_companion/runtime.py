@@ -200,6 +200,9 @@ class Runtime:
         self._alerts_fail_sig: tuple | None = None  # signature the View rejected
         self._alerts_retry_at = 0.0
         self._alive_failed = False
+        # True while the previous tick finished (the panel answered); False after a
+        # reconnect or an aborted tick. Lets a slow tick renew the sign of life early.
+        self._tick_ok = False
 
 
 
@@ -366,17 +369,24 @@ class Runtime:
             return
         folder = Path(cfg.dir)
         tmp = folder / f"{ALERT_ALIVE_FILE}.{os.getpid()}.tmp"
-        try:
-            folder.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(json.dumps({"at": time.time(), "pid": os.getpid()}), encoding="utf-8")
-            os.replace(tmp, folder / ALERT_ALIVE_FILE)
-        except OSError as exc:
-            if not self._alive_failed:
-                self._alive_failed = True
-                self.log(f"could not write the service sign of life: {exc}")
-            self._remove_quietly(str(tmp))
-        else:
+        error: OSError | None = None
+        # On Windows os.replace can fail with "access denied" while the hook has
+        # the file open for a moment: one immediate second try.
+        for _ in range(2):
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                tmp.write_text(json.dumps({"at": time.time(), "pid": os.getpid()}), encoding="utf-8")
+                os.replace(tmp, folder / ALERT_ALIVE_FILE)
+                error = None
+                break
+            except OSError as exc:
+                error = exc
+                self._remove_quietly(str(tmp))
+        if error is None:
             self._alive_failed = False
+        elif not self._alive_failed:
+            self._alive_failed = True
+            self.log(f"could not write the service sign of life: {error}")
 
     def _clear_alive(self) -> None:
         if self.config.alerts.enabled:
@@ -556,11 +566,7 @@ class Runtime:
             self._publish()
             self._send(self.live.snapshot(), allow_republish=False)
         # View reloaded: send persisted preferences for switches
-        self._send(self._rest_payload(), allow_republish=False)
-        self._send(self._photo_clock_payload(), allow_republish=False)
-        toggles = self.runner.hotkey_states()
-        if toggles:
-            self._send({"toggles": toggles}, allow_republish=False)
+        self._send_states()
         self._alerts_sent = None  # the View may have reloaded: send the list again
         self._alerts_fail_sig = None
         if self.config.panel.subscribe and not self._stream_started:
@@ -569,6 +575,19 @@ class Runtime:
             self.client.subscribe(self._wake.set)
         if self.config.display.enabled:
             self._set_display(str(self._normal_brightness()))
+
+    def _send_states(self) -> None:
+        """Send the service-side state a freshly published View does not know.
+
+        Called after every successful `_publish`: rest mode, photo clock and (only
+        when a `hotkey_toggle` action exists) which keys are held. Never republishes,
+        so it cannot start a republish loop.
+        """
+        self._send(self._rest_payload(), allow_republish=False)
+        self._send(self._photo_clock_payload(), allow_republish=False)
+        toggles = self.runner.hotkey_states()
+        if toggles:
+            self._send({"toggles": toggles}, allow_republish=False)
 
     def _set_display(self, brightness: str | int) -> None:
         try:
@@ -618,6 +637,7 @@ class Runtime:
         try:
             self._publish()
             self._send(self.live.snapshot(), allow_republish=False)
+            self._send_states()
             self.client.update_view(data, presentation=self.presentation)
             self._republish_attempts = 0
             return True
@@ -654,6 +674,11 @@ class Runtime:
         """One round: heartbeat, live data feeds, events. Public for tests."""
         self._pulse = time.time()
         now = self.clock()
+        # A tick can outlast the hook's patience (publish + weather + media). The
+        # previous round proved the panel answers, so say so before the slow part.
+        if self._tick_ok:
+            self._renew_alive()
+        self._tick_ok = False
 
         if now - self._last_heartbeat >= self.config.loop.heartbeat_s:
             self._last_heartbeat = now
@@ -679,6 +704,7 @@ class Runtime:
             self.log("image list changed; republishing view")
             try:
                 self._publish()
+                self._send_states()
             except PanelError as exc:
                 self.log(f"could not republish: {exc}")
 
@@ -697,6 +723,7 @@ class Runtime:
         self._read_events(now)
         # last on purpose: reaching here means the panel answered this round
         self._renew_alive()
+        self._tick_ok = True
 
     def _read_events(self, now: float) -> None:
         first = self.cursor is None
@@ -877,6 +904,12 @@ class Runtime:
 
     def _reconnect(self) -> None:
         self._clear_alive()  # no panel to show a banner: the hook must not wait for one
+        self._tick_ok = False
+        # No panel means no button to release the keys, and the phone may stay away
+        # for hours: let go now. `_connect` sends the toggles again (all false).
+        if self.runner.held_hotkeys:
+            self.log("panel lost; releasing held keys")
+            self.runner.release_all_held_keys()
         self.client.session_id = None
         self._stream_started = False
         self._last_subscription = 0.0

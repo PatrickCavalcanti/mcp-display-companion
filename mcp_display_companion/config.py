@@ -105,9 +105,9 @@ def expand_path(value: str) -> Path:
 
 def default_secrets_path() -> Path:
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "secrets.json"
 
 
@@ -137,17 +137,17 @@ def default_alerts_dir() -> Path:
     if custom:
         return expand_path(custom)
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "alerts"
 
 
 def default_cursor_path() -> Path:
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "cursor.json"
 
 

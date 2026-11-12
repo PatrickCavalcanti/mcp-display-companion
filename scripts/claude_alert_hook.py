@@ -3,7 +3,8 @@ and lets the panel answer it.
 
 Register it for the events below through the launcher command documented in
 docs/configuration.md (it exits 0 with no output even if this file is missing;
-a bare `python missing.py` would exit 2, which Claude Code reads as "deny"):
+a bare `python missing.py` would exit 2, which Claude Code treats as a blocking
+error on some events, though not on PermissionRequest):
 
 * ``PermissionRequest`` (synchronous, timeout 300 s): writes an *actionable* alert
   ``<alerts>/<session>-<h>-<rand>.json`` (``h`` = hash of the tool call) and waits for ``<same id>.answer`` (``allow`` or
@@ -193,30 +194,55 @@ def wait_seconds():
 
 
 def alive_max_age():
+    """Max age of the sign of life, in seconds. A value that is not a finite number
+    above zero falls back to the default; the floor is 1 s."""
     try:
-        return max(0.0, float(os.environ.get("PANEL_COMPANION_ALIVE_MAX_AGE", ALIVE_MAX_AGE_S)))
+        value = float(os.environ.get("PANEL_COMPANION_ALIVE_MAX_AGE", ALIVE_MAX_AGE_S))
     except ValueError:
         return ALIVE_MAX_AGE_S
+    if not value > 0:  # also catches NaN
+        return ALIVE_MAX_AGE_S
+    return max(1.0, value)
 
 
-def service_alive(folder):
-    """True when the service renewed its sign of life recently. A time in the
-    future (clock skew) counts as alive; a missing or unreadable file does not."""
+ALIVE, STALE, MISSING, UNREADABLE = "alive", "stale", "missing", "unreadable"
+
+
+def alive_state(folder):
+    """ALIVE when the service renewed its sign of life recently (a time in the
+    future, clock skew, counts as alive); MISSING when there is no file; STALE when
+    it is too old; UNREADABLE for a read error or invalid content (an antivirus or
+    an `os.replace` in progress can cause a passing one)."""
     try:
         with open(os.path.join(folder, ALIVE_FILE), encoding="utf-8") as file:
             stamp = json.load(file)["at"]
+    except FileNotFoundError:
+        return MISSING
     except (OSError, ValueError, KeyError, TypeError):
-        return False
+        return UNREADABLE
     if isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or stamp != stamp:
-        return False
-    return time.time() - stamp <= alive_max_age()
+        return UNREADABLE
+    return ALIVE if time.time() - stamp <= alive_max_age() else STALE
+
+
+def service_alive(folder):
+    return alive_state(folder) == ALIVE
+
+
+def service_alive_at_start(folder):
+    """Like `service_alive`, with one more try after 0.1 s when the read failed."""
+    state = alive_state(folder)
+    if state == UNREADABLE:
+        time.sleep(0.1)
+        state = alive_state(folder)
+    return state == ALIVE
 
 
 def permission_request(data, sid, folder):
     raw_tool = str(data.get("tool_name") or "?")
     if not_approvable(raw_tool):
         return
-    if not service_alive(folder):
+    if not service_alive_at_start(folder):
         return  # nobody to show the banner: let Claude Code ask on the PC right away
     tool_input = data.get("tool_input")
     rid = f"{sid}-{call_hash(raw_tool, tool_input)}-{secrets.token_hex(8)}"
@@ -233,6 +259,7 @@ def permission_request(data, sid, folder):
         "actionable": True,
     })
     deadline = time.monotonic() + wait_seconds()
+    not_alive = 0  # consecutive reads without a sign of life
     while True:
         try:
             with open(answer_path, encoding="utf-8") as file:
@@ -249,7 +276,10 @@ def permission_request(data, sid, folder):
         if not os.path.exists(request_path):  # answered on the PC: stay silent
             remove(answer_path)
             return
-        if not service_alive(folder):  # the service or the phone went away while we waited
+        # the service or the phone went away while we waited: give up only after two
+        # reads in a row say so, so one failed read does not drop the request
+        not_alive = 0 if service_alive(folder) else not_alive + 1
+        if not_alive >= 2:
             remove(request_path)
             remove(answer_path)
             return

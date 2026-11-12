@@ -461,3 +461,89 @@ def test_connect_sends_no_toggles_without_toggle_actions(runtime):
     rt, client, host, live, now = runtime
     rt._connect()
     assert not any('toggles' in data for data, _ in client.updates)
+
+
+# --------------------------------------------------------------------------- #
+# held keys when the panel goes away; the screen gets its states back on republish
+# --------------------------------------------------------------------------- #
+def test_reconnect_releases_the_held_keys_and_connect_reports_them_released(hotkey_runtime, monkeypatch):
+    rt, client, host = hotkey_runtime
+    monkeypatch.setattr('mcp_display_companion.runtime.time.sleep', lambda s: None)
+    rt._connect()
+    rt.runner.run('pc_mic')
+    assert rt.runner.is_hotkey_active('pc_mic')
+    host.calls.clear()
+    messages = []
+    rt.log = messages.append
+    rt._reconnect()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]
+    assert not rt.runner.is_hotkey_active('pc_mic')
+    assert any('releasing held keys' in m for m in messages)
+    client.updates.clear()
+    rt._connect()
+    assert any(data.get('toggles') == {'pc_mic': False} for data, _ in client.updates)
+
+
+def test_reconnect_without_held_keys_touches_no_key(hotkey_runtime, monkeypatch):
+    rt, client, host = hotkey_runtime
+    monkeypatch.setattr('mcp_display_companion.runtime.time.sleep', lambda s: None)
+    rt._connect()
+    host.calls.clear()
+    messages = []
+    rt.log = messages.append
+    rt._reconnect()
+    assert host.calls == []
+    assert not any('releasing' in m for m in messages)
+
+
+def test_republish_after_a_rejected_update_sends_rest_clock_and_toggles(hotkey_runtime):
+    rt, client, host = hotkey_runtime
+    rt._connect()
+    rt.runner.run('pc_mic')
+    rt.set_rest(True)
+    rt.set_photo_clock(True)
+    client.updates.clear()
+    client.fail_updates = 1
+    assert rt._send({'vivo': 1}) is True
+    assert len(client.shows) == 2
+    after = [data for data, presentation in client.updates if presentation == 'screen-2']
+    assert any(d.get('rest', {}).get('enabled') is True for d in after)
+    assert any(d.get('photo_clock') == {'enabled': True} for d in after)
+    assert any(d.get('toggles') == {'pc_mic': True} for d in after)
+    assert after[-1] == {'vivo': 1}
+
+
+def test_republish_sends_no_toggles_without_toggle_actions(runtime):
+    rt, client, _, _, _ = runtime
+    rt._connect()
+    client.updates.clear()
+    client.fail_updates = 1
+    rt.tick()
+    assert any('rest' in d for d, _ in client.updates)
+    assert any('photo_clock' in d for d, _ in client.updates)
+    assert not any('toggles' in d for d, _ in client.updates)
+
+
+def test_states_are_not_sent_twice_in_connect(hotkey_runtime):
+    rt, client, host = hotkey_runtime
+    rt._connect()
+    assert sum('rest' in d for d, _ in client.updates) == 1
+    assert sum('photo_clock' in d for d, _ in client.updates) == 1
+    assert sum('toggles' in d for d, _ in client.updates) == 1
+
+
+def test_image_list_change_republish_sends_the_states(hotkey_runtime):
+    rt, client, host = hotkey_runtime
+    rt._connect()
+    rt.runner.run('pc_mic')
+
+    class Changed:
+        def check_changed(self, now): return True
+        def due(self, now): return None
+        def has_images(self): return False
+
+    rt.slides = Changed()
+    client.updates.clear()
+    rt.tick()
+    assert len(client.shows) == 2
+    assert any(d.get('toggles') == {'pc_mic': True} for d, p in client.updates if p == 'screen-2')

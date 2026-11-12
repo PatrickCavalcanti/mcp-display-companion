@@ -237,11 +237,8 @@ Restart the running Claude Code sessions (or run `/reload-plugins`) to load it.
 * **Remove:** `claude plugin uninstall mcp-display-alerts@mcp-display` (and
   `claude plugin marketplace remove mcp-display` if you no longer want the marketplace).
 * **Already registered the hook by hand? Remove that registration from
-  `settings.json` before you install the plugin.** Claude Code runs the manual
-  copy and the plugin copy as two separate handlers. Each writes its own request
-  file for the same tool call, so the panel shows two banners for it (the `+1`
-  badge). An answer on the panel is used by one of them; the other is cleared when
-  the tool call ends.
+  `settings.json` before you install the plugin.** The two registrations make two
+  requests for the same tool call (the banner shows `+1`).
 * **Python:** the plugin command is `python3 ... || python ...`: it runs the
   script with `python3`, and with `python` when there is no `python3`. One of them
   must be on the `PATH` of the shell Claude Code uses for hooks (Git Bash, or
@@ -252,6 +249,20 @@ Restart the running Claude Code sessions (or run `/reload-plugins`) to load it.
 * **Alerts folder:** no setting needed. The hook and the service use the same
   default folder on each system (see the `dir` row above). If you set `alerts.dir`,
   also set `PANEL_COMPANION_ALERTS` for Claude Code.
+* **Shell and version:** the hook command uses `||`. On Windows it works with
+  Git Bash or PowerShell 7. With Windows PowerShell 5.1 the hook does not run (a
+  syntax error), the banner does not show, and Claude Code goes on to its normal
+  dialog. It needs Claude Code 2.1.295 or later (`onFailure`).
+
+#### If the banner does not show
+
+1. The service is version 1.1 or later, it is running, and it is connected to the
+   panel (`alerts.enabled` is `true`).
+2. The shell for hooks is Git Bash or PowerShell 7, not Windows PowerShell 5.1.
+3. The hook is registered only once: remove a manual registration if you use the
+   plugin.
+4. `PANEL_COMPANION_ALERTS` points to the same folder on both sides, if you set
+   `alerts.dir` or the variable.
 
 ### Manual registration
 
@@ -270,9 +281,14 @@ Restart the running Claude Code sessions (or run `/reload-plugins`) to load it.
 > of life, so the new hook never offers the banner).
 
 Do **not** call the script directly (`python script.py`): if the file is missing,
-Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
-"block / deny". Use this launcher instead: it exits 0 with no output when the
-script does not exist, and passes the script's own exit 0 through (use forward
+Python exits with code **2**. Claude Code treats exit code 2 as a blocking error
+on several events (`PreToolUse`, `UserPromptSubmit`, `Stop` and others), while on
+`PermissionRequest` it is not honored and the permission flow goes on unchanged
+(see "Exit code 2 behavior per event" in <https://code.claude.com/docs/en/hooks>).
+This hook is only registered for `PermissionRequest`, `Notification` and the
+clearing events, so a missing script would not block anything today. The launcher
+below avoids depending on that: it exits 0 with no output when the script does not
+exist, and passes the script's own exit 0 through (use forward
 slashes in the path; `-I -S` keeps Python fast and isolated). On Windows use the
 full path of `python.exe`; on macOS and Linux use `python3` (example below):
 

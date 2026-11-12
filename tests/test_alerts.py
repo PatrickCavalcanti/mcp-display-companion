@@ -1231,3 +1231,172 @@ def test_sign_of_life_write_failure_is_logged_once(rt, monkeypatch):
     rt.tick()
     rt.tick()
     assert sum("sign of life" in m for m in logs) == 1
+
+
+def test_sign_of_life_write_retries_once_on_access_denied(rt, monkeypatch):
+    logs = []
+    rt.log = logs.append
+    real = os.replace
+    calls = []
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) == 1:
+            raise PermissionError("access denied")   # the hook had the file open
+        return real(src, dst)
+
+    monkeypatch.setattr("mcp_display_companion.runtime.os.replace", flaky)
+    rt._renew_alive()
+    assert len(calls) == 2 and alive_path(rt).exists()
+    assert not logs                                   # one failure alone is not logged
+    assert [p.name for p in rt.adir.iterdir()] == [".service-alive"]
+
+
+def test_slow_tick_renews_the_sign_of_life_before_the_slow_part(rt):
+    rt.tick()                                         # a tick that finished well
+    old = time.time() - 3600
+    os.utime(alive_path(rt), (old, old))
+    seen = []
+
+    def slow_due(now, force=False):
+        seen.append(json.loads(alive_path(rt).read_text(encoding="utf-8"))["at"])
+        return {}
+
+    rt.live.due = slow_due
+    rt.tick()
+    assert seen and seen[0] > time.time() - 5         # renewed at the start, not only at the end
+
+
+def test_first_tick_after_a_reconnect_does_not_renew_at_the_start(rt, monkeypatch):
+    rt.tick()
+    monkeypatch.setattr("mcp_display_companion.runtime.time.sleep", lambda s: None)
+    rt._reconnect()
+    seen = []
+
+    def due(now, force=False):
+        seen.append(alive_path(rt).exists())
+        return {}
+
+    rt.live.due = due
+    rt.tick()
+    assert seen == [False]                            # the panel has not answered yet
+    assert alive_path(rt).exists()                    # but it did by the end of the tick
+
+
+def test_an_aborted_tick_does_not_vouch_for_the_next_one(rt):
+    from mcp_display_companion.client import PanelError
+
+    rt.tick()
+
+    def down(since):
+        raise PanelError("phone off")
+
+    rt.client_.read_events = down
+    with pytest.raises(PanelError):
+        rt.tick()
+    if alive_path(rt).exists():
+        os.remove(alive_path(rt))
+    seen = []
+
+    def due(now, force=False):
+        seen.append(alive_path(rt).exists())
+        return {}
+
+    rt.live.due = due
+    with pytest.raises(PanelError):
+        rt.tick()
+    assert seen == [False]
+
+
+# --------------------------------------------------------------------------- #
+# the hook tolerates one failed read of the sign of life
+# --------------------------------------------------------------------------- #
+def load_hook():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("claude_alert_hook_under_test", HOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("0", 20.0), ("-5", 20.0), ("nan", 20.0), ("abc", 20.0), ("", 20.0),
+    ("0.2", 1.0), ("1", 1.0), ("45", 45.0),
+])
+def test_hook_alive_max_age_falls_back_and_has_a_floor(monkeypatch, value, expected):
+    hook = load_hook()
+    monkeypatch.setenv("PANEL_COMPANION_ALIVE_MAX_AGE", value)
+    assert hook.alive_max_age() == expected
+
+
+def test_hook_alive_max_age_default_without_env(monkeypatch):
+    hook = load_hook()
+    monkeypatch.delenv("PANEL_COMPANION_ALIVE_MAX_AGE", raising=False)
+    assert hook.alive_max_age() == hook.ALIVE_MAX_AGE_S
+
+
+def test_hook_start_check_retries_a_failed_read_once(monkeypatch):
+    hook = load_hook()
+    sleeps = []
+    monkeypatch.setattr(hook.time, "sleep", sleeps.append)
+    states = iter([hook.UNREADABLE, hook.ALIVE])
+    monkeypatch.setattr(hook, "alive_state", lambda folder: next(states))
+    assert hook.service_alive_at_start("x") is True
+    assert sleeps == [0.1]
+
+
+def test_hook_start_check_does_not_retry_a_missing_file(monkeypatch):
+    hook = load_hook()
+    sleeps = []
+    monkeypatch.setattr(hook.time, "sleep", sleeps.append)
+    monkeypatch.setattr(hook, "alive_state", lambda folder: hook.MISSING)
+    assert hook.service_alive_at_start("x") is False
+    assert sleeps == []
+
+
+def test_hook_alive_state_tells_missing_from_unreadable(tmp_path):
+    hook = load_hook()
+    assert hook.alive_state(str(tmp_path)) == hook.MISSING
+    (tmp_path / ".service-alive").write_text("{half", encoding="utf-8")
+    assert hook.alive_state(str(tmp_path)) == hook.UNREADABLE
+    write_alive(tmp_path)
+    assert hook.alive_state(str(tmp_path)) == hook.ALIVE
+
+
+def test_hook_waiting_gives_up_only_after_two_reads_in_a_row(alerts_dir, monkeypatch):
+    hook = load_hook()
+    monkeypatch.setattr(hook, "service_alive_at_start", lambda folder: True)
+    monkeypatch.setattr(hook.time, "sleep", lambda s: None)
+    monkeypatch.setenv("PANEL_COMPANION_ALERT_WAIT", "30")
+    reads = iter([False, True, False, False, True, True])   # a lone miss is forgiven
+    count = []
+
+    def alive(folder):
+        count.append(1)
+        return next(reads)
+
+    monkeypatch.setattr(hook, "service_alive", alive)
+    hook.permission_request(permission(), "sess-1", str(alerts_dir))
+    assert len(count) == 4                                    # miss, ok, miss, miss -> gone
+    assert leftovers(alerts_dir) == []
+
+
+# --------------------------------------------------------------------------- #
+# the default alerts folder is the same for the service and the hook
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("env", [
+    {},
+    {"APPDATA": "", "XDG_CONFIG_HOME": ""},
+    {"PANEL_COMPANION_ALERTS": ""},
+    {"APPDATA": "", "XDG_CONFIG_HOME": "", "PANEL_COMPANION_ALERTS": ""},
+])
+def test_service_and_hook_agree_on_the_default_alerts_folder(monkeypatch, env):
+    from mcp_display_companion.config import default_alerts_dir
+
+    hook = load_hook()
+    for name in ("PANEL_COMPANION_ALERTS", "APPDATA", "XDG_CONFIG_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    assert Path(hook.alerts_dir()) == default_alerts_dir()

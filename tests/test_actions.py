@@ -233,3 +233,23 @@ def test_release_configured_hotkeys_survives_a_failing_host(make_config, host, m
     monkeypatch.setattr(host, 'key_up', boom)
     ActionRunner(make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']})]),
                  host).release_configured_hotkeys()
+
+
+def test_hotkey_toggle_registers_each_key_before_pressing_it(make_config, host, monkeypatch):
+    """If the process dies mid-press, release_all_held_keys must already know the keys."""
+    r = _hotkey(make_config, host)
+    seen = []
+
+    def key_down(vk):
+        seen.append((vk, list(r.held_hotkeys.get('pc_action', []))))
+        if len(seen) == 2:
+            raise KeyboardInterrupt   # the process is going away between two key_down
+        return True
+
+    monkeypatch.setattr(host, 'key_down', key_down)
+    with pytest.raises(KeyboardInterrupt):
+        r.run('pc_action')
+    assert seen == [(0x11, [0x11]), (0x5B, [0x11, 0x5B])]
+    host.calls.clear()
+    r.release_all_held_keys()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]

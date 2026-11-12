@@ -137,14 +137,17 @@ class ActionRunner:
                 ok = bool(self.host.key_up(vk)) and ok
             return ActionResult(ok, f"released {keys_raw}")
         vk_list = [parse_key(k) for k in keys_raw]
-        pressed: list[int] = []
+        # Register each key BEFORE pressing it: whatever path ends the run (an
+        # exception, the watchdog), release_all_held_keys already knows the key.
+        pressed = self.held_hotkeys.setdefault(action.id, [])
         for vk in vk_list:
+            pressed.append(vk)
             if not self.host.key_down(vk):
+                pressed.pop()  # this key never went down
+                self.held_hotkeys.pop(action.id, None)
                 for done in reversed(pressed):
                     self.host.key_up(done)
                 return ActionResult(False, f"could not hold {keys_raw}")
-            pressed.append(vk)
-        self.held_hotkeys[action.id] = vk_list
         return ActionResult(True, f"holding {keys_raw}")
 
     def _run_volume(self, action: Action) -> ActionResult:

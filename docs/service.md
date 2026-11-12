@@ -181,6 +181,10 @@ touches from hours ago.
 - **The single instance lock is per user now** (next to the token), so a second
   clone in another folder no longer starts alongside the first.
 
+After you update the repository, **restart the service**; running the installer
+again does that. Without a restart the old service keeps running, it writes no sign
+of life, and the new hook never offers the banner.
+
 After `git pull`, **re-run the installer** instead of only restarting the task:
 `powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1` (Windows)
 or `./scripts/install-service.sh` (macOS/Linux). It is idempotent and installs

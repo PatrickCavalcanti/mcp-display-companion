@@ -329,7 +329,8 @@ turns such a call into an event for the companion, which only logs
 | Key | Default | Meaning |
 |---|---|---|
 | `template` | the one shipped in the package | another `painel.html`-style template |
-| `title` | `"Painel"` | |
+| `title` | `"Panel"` | name of the View on the phone (data from you, never translated) |
+| `language` | `"en"` | language of the panel's own texts: `"en"` or `"pt-BR"`. Covers the fixed texts on the screen (page titles, status line, settings, Home page, alert banner), the day and month names and the date format. Action labels come from your `actions` and are shown as you wrote them; they are not translated. Any other value is a configuration error. |
 | `show_clock` | `true` | clock card on page 1 |
 | `show_weather` | `true` | weather card on page 1 (also needs `live.weather.enabled`) |
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8">
+<html lang="{{LANG}}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{TITLE}}</title>
 <style>
@@ -454,9 +454,9 @@ body.alerta-on #alerta{display:flex}
   </div></div>
   <div id="despertar"></div>
   <div id="rodape">
-    <div id="aviso">conectando</div>
+    <div id="aviso">{{T:status_connecting}}</div>
     <div id="pontos">{{PONTOS}}</div>
-    <div id="estado"><i></i><span id="estado-txt">PC</span></div>
+    <div id="estado"><i></i><span id="estado-txt">{{T:status_pc}}</span></div>
   </div>
 </div>
 
@@ -465,17 +465,24 @@ body.alerta-on #alerta{display:flex}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5 4.5 5.5v5.7c0 4.6 3.1 8.1 7.5 9.8 4.4-1.7 7.5-5.2 7.5-9.8V5.5z"/><rect x="8.7" y="10.8" width="6.6" height="5.2" rx="1.1" fill="currentColor" stroke="none"/><path d="M10 10.8V9.4a2 2 0 0 1 4 0v1.4"/></svg>
       <div class="alerta-txt"><div id="alerta-t1"></div><div id="alerta-tool"></div></div>
       <div id="alerta-mais"></div>
-      <button id="alerta-x" type="button" aria-label="dispensar">&times;</button>
+      <button id="alerta-x" type="button" aria-label="{{T:alert_dismiss}}">&times;</button>
     </div>
     <div id="alerta-t2"></div>
     <div id="alerta-aviso"></div>
     <div class="alerta-botoes">
-      <button id="alerta-negar" type="button">Negar</button>
-      <button id="alerta-aprovar" type="button"><div class="fill"></div><span>Segure p/ aprovar</span></button>
+      <button id="alerta-negar" type="button">{{T:alert_deny}}</button>
+      <button id="alerta-aprovar" type="button"><div class="fill"></div><span>{{T:alert_approve_hold}}</span></button>
     </div>
   </div>
 
 <script>
+/* Fixed texts of the screen, in the panel language (view.language). `tx` fills {name} slots. */
+var T = {{TEXTS_JSON}};
+function tx(key, vars) {
+  var s = T[key] === undefined ? key : T[key];
+  return s.replace(/\{(\w+)\}/g, function (m, n) { return vars && vars[n] !== undefined ? vars[n] : m; });
+}
+
 var DESLOCA_PX = 6;
 var ESPERA_CONFIRMACAO_MS = 6000;   /* tolerancia para o PC confirmar o toque */
 var LIMITE_SILENCIO_MS = 150000;    /* sem sinal do PC por 150 s = offline */
@@ -516,18 +523,18 @@ function estadoPC() {
   var e = el('estado');
   if (!e) return;
   e.classList.toggle('off', off);
-  el('estado-txt').textContent = off ? 'PC offline' : 'PC';
+  el('estado-txt').textContent = off ? tx('status_pc_offline') : tx('status_pc');
 }
 setInterval(estadoPC, 5000);
 
 req('ui/initialize', {appInfo: {name: 'painel-companion', version: '2'}, appCapabilities: {}, protocolVersion: '2026-01-26'})
   .then(function (r) {
-    if (r.error) { aviso('falha no handshake', 'erro'); return; }
+    if (r.error) { aviso(tx('status_handshake_failed'), 'erro'); return; }
     nota('ui/notifications/initialized', {});
     pronto = true;
     sinalDoPC();
     casaIniciar();
-    aviso('pronto', '');
+    aviso(tx('status_ready'), '');
   });
 
 /* ---------------- utilidades ---------------- */
@@ -539,27 +546,27 @@ function aviso(text, cls) {
   var a = el('aviso'); if (!a) return;
   a.textContent = text; a.className = cls || '';
   clearTimeout(avisoTimer);
-  if (cls === 'ok' || cls === 'erro') avisoTimer = setTimeout(function () { aviso('pronto', ''); }, 2500);
+  if (cls === 'ok' || cls === 'erro') avisoTimer = setTimeout(function () { aviso(tx('status_ready'), ''); }, 2500);
 }
 
 /* ---------------- relogio ---------------- */
-var DIAS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+function nomeDoDia(n) { return tx('clock_day_' + n); }
+function nomeDoMes(n) { return tx('clock_month_' + n); }
 function relogio() {
   var t = new Date();
   var hora = dois(t.getHours()) + ':' + dois(t.getMinutes());
-  var textoData = t.getDate() + ' de ' + MESES[t.getMonth()] + ' de ' + t.getFullYear();
+  var textoData = tx('clock_date', {day: t.getDate(), month: nomeDoMes(t.getMonth()), year: t.getFullYear()});
   var h = el('hora');
   if (h) {
     h.textContent = hora;
-    el('dia').textContent = DIAS[t.getDay()];
+    el('dia').textContent = nomeDoDia(t.getDay());
     el('data').textContent = textoData;
   }
   // a hora grande sobre a foto
   var hs = el('hora-slide');
   if (hs) {
     hs.textContent = hora;
-    el('data-slide').textContent = DIAS[t.getDay()] + ' · ' + textoData;
+    el('data-slide').textContent = nomeDoDia(t.getDay()) + ' · ' + textoData;
   }
 }
 /* The clock is the most useful information on screen: it takes the widest
@@ -685,10 +692,11 @@ function showSlide(slide) {
 
 function iconeClima(c) {
   var s = String(c || '').toLowerCase();
-  if (/chuv|garo|temporal|pancada|tempest|trovo/.test(s)) return '#i-chuva';
-  if (/parcial|variav|poucas|entre nuvens/.test(s)) return '#i-parcial';
-  if (/nubl|nuvem|nuvens|encoberto|cinz|neblin|nevoe/.test(s)) return '#i-nuvem';
-  if (/sol|limpo|claro|ensolarado/.test(s)) return '#i-sol';
+  /* keywords of both languages: the condition text arrives already translated */
+  if (/chuv|garo|temporal|pancada|tempest|trovo|rain|drizzle|shower|storm|thunder/.test(s)) return '#i-chuva';
+  if (/parcial|variav|poucas|entre nuvens|partly|mostly|variable|few clouds/.test(s)) return '#i-parcial';
+  if (/nubl|nuvem|nuvens|encoberto|cinz|neblin|nevoe|cloud|overcast|fog|mist|haze/.test(s)) return '#i-nuvem';
+  if (/sol|limpo|claro|ensolarado|sun|clear|fair/.test(s)) return '#i-sol';
   return '#i-parcial';
 }
 
@@ -700,7 +708,7 @@ function clima(c) {
   el('cidade').textContent = c.cidade === undefined ? '' : String(c.cidade);
   el('icone').firstChild.setAttribute('href', iconeClima(c.condicao));
   var n = new Date();
-  el('atual').textContent = 'atualizado ' + dois(n.getHours()) + ':' + dois(n.getMinutes());
+  el('atual').textContent = tx('weather_updated', {time: dois(n.getHours()) + ':' + dois(n.getMinutes())});
 }
 
 function midia(m) {
@@ -708,16 +716,16 @@ function midia(m) {
   var tocando = m.tocando === true;
   todos('.ic-pp use').forEach(function (u) { u.setAttribute('href', tocando ? '#i-pause' : '#i-play'); });
   todos('.rot-pp').forEach(function (s) {
-    if (m.titulo) s.textContent = (tocando ? '▶ ' : '⏸ ') + (tocando ? 'Tocando' : 'Pausado');
-    else s.textContent = tocando ? 'Pausar' : 'Tocar';
+    if (m.titulo) s.textContent = (tocando ? '▶ ' : '⏸ ') + (tocando ? tx('media_playing') : tx('media_paused'));
+    else s.textContent = tocando ? tx('media_action_pause') : tx('media_action_play');
   });
 
   var faixa = el('faixa');
-  if (faixa) faixa.textContent = m.titulo || 'Mídia no computador';
+  if (faixa) faixa.textContent = m.titulo || tx('media_default_title');
   var sub = el('sub');
   if (sub) {
-    var estado = tocando ? 'tocando' : 'pausado';
-    sub.textContent = m.titulo ? (m.artista ? m.artista + ' · ' + estado : estado) : 'aguardando o player';
+    var estado = tocando ? tx('media_state_playing') : tx('media_state_paused');
+    sub.textContent = m.titulo ? (m.artista ? m.artista + ' · ' + estado : estado) : tx('media_waiting_player');
   }
 
   var bannerBtn = document.querySelector('.btn-midia-banner');
@@ -762,22 +770,22 @@ function notifyPC(name) {
 
 function chamar(acao) {
   if (resting) { return; }   /* the touch that wakes the screen does not click the button */
-  if (!pronto) { aviso('conectando', 'espera'); return; }
+  if (!pronto) { aviso(tx('status_connecting'), 'espera'); return; }
   if (pcOffline()) marcar(acao, 'erro');   /* o rodape ja mostra 'PC offline' */
-  if (limite()) { aviso('muitos toques, aguarde', 'erro'); return; }
-  marcar(acao, 'espera'); aviso('enviando: ' + rotulo(acao), 'espera');
+  if (limite()) { aviso(tx('status_too_many_taps'), 'erro'); return; }
+  marcar(acao, 'espera'); aviso(tx('status_sending', {label: rotulo(acao)}), 'espera');
   clearTimeout(espera[acao]);
   if (ESPERA_CONFIRMACAO_MS > 0) {
     espera[acao] = setTimeout(function () {
-      delete espera[acao]; marcar(acao, 'erro'); aviso('sem resposta do PC', 'erro');
+      delete espera[acao]; marcar(acao, 'erro'); aviso(tx('status_no_reply'), 'erro');
     }, ESPERA_CONFIRMACAO_MS);
   }
   req('tools/call', {name: acao, arguments: {}}).then(function (r) {
     var recusou = r.error || (r.result && r.result.isError);
     var sc = r.result && r.result.structuredContent;
     var paraOAgente = sc && sc.encaminhado === 'fila';
-    if (recusou) { clearTimeout(espera[acao]); delete espera[acao]; marcar(acao, 'erro'); aviso('recusado: ' + rotulo(acao), 'erro'); }
-    else if (!paraOAgente) { clearTimeout(espera[acao]); delete espera[acao]; marcar(acao, 'ok'); aviso('feito: ' + rotulo(acao), 'ok'); }
+    if (recusou) { clearTimeout(espera[acao]); delete espera[acao]; marcar(acao, 'erro'); aviso(tx('status_refused', {label: rotulo(acao)}), 'erro'); }
+    else if (!paraOAgente) { clearTimeout(espera[acao]); delete espera[acao]; marcar(acao, 'ok'); aviso(tx('status_done', {label: rotulo(acao)}), 'ok'); }
   });
 }
 function confirmou(c) {
@@ -785,7 +793,7 @@ function confirmou(c) {
   clearTimeout(espera[c.acao]); delete espera[c.acao];
   var bom = c.ok !== false;
   marcar(c.acao, bom ? 'ok' : 'erro');
-  aviso((bom ? 'feito: ' : 'falhou: ') + rotulo(c.acao), bom ? 'ok' : 'erro');
+  aviso(tx(bom ? 'status_done' : 'status_failed', {label: rotulo(c.acao)}), bom ? 'ok' : 'erro');
 }
 todos('.btn-clicavel').forEach(function (b) {
   b.addEventListener('click', function () { chamar(b.getAttribute('data-acao')); });
@@ -893,21 +901,21 @@ function casaStatus(texto, cls) {
   var s = el('casa-status'); if (!s) return;
   s.textContent = texto; s.className = cls || '';
 }
-function casaFmt(n) { return String(n).replace('.', ',') + '°'; }
+function casaFmt(n) { return String(n).replace('.', tx('home_decimal_separator')) + '°'; }
 function casaRender() {
   var a = casa.ar, l = casa.luz, ok = casa.ok !== null;
   var p = document.querySelector('[data-casa-btn="ar"]');
   if (p) { p.classList.toggle('on', ok && a.on); p.setAttribute('aria-pressed', ok && a.on ? 'true' : 'false'); }
-  var pe = el('ar-estado'); if (pe) pe.textContent = !ok ? '—' : (a.on ? 'Ligado' : 'Desligado');
+  var pe = el('ar-estado'); if (pe) pe.textContent = !ok ? '—' : (a.on ? tx('home_on') : tx('home_off'));
   var al = el('ar-alvo'); if (al) al.textContent = typeof a.alvo === 'number' ? casaFmt(a.alvo) : '--°';
   ['menos', 'mais'].forEach(function (q) {     /* no target (e.g. heat_cool): nothing to step */
     var b = document.querySelector('[data-casa-btn="' + q + '"]');
     if (b) b.disabled = typeof a.alvo !== 'number';
   });
-  var sa = el('ar-sala'); if (sa) sa.textContent = typeof a.atual === 'number' ? 'Ambiente ' + casaFmt(a.atual) : '';
+  var sa = el('ar-sala'); if (sa) sa.textContent = typeof a.atual === 'number' ? tx('home_room', {temp: casaFmt(a.atual)}) : '';
   var lb = document.querySelector('[data-casa-btn="luz"]');
   if (lb) { lb.classList.toggle('on', ok && l.on); lb.setAttribute('aria-pressed', ok && l.on ? 'true' : 'false'); }
-  var le = el('luz-estado'); if (le) le.textContent = !ok ? '—' : (l.on ? 'Acesa' : 'Apagada');
+  var le = el('luz-estado'); if (le) le.textContent = !ok ? '—' : (l.on ? tx('home_lamp_on') : tx('home_lamp_off'));
 }
 
 /* Tolerant reader of the GetLiveContext text (YAML-like, values may be quoted). */
@@ -992,7 +1000,7 @@ function casaIndisponivel() {
     if (!casa.tempTimer && !casa.tempEnvio) casa.ar.alvo = casa.conf.ar.alvo;
   }
   casaRender();
-  casaStatus('Home Assistant indisponível', 'erro');
+  casaStatus(tx('home_unavailable'), 'erro');
 }
 function casaAtualizar(tentativa) {
   if (!CASA || !pronto || casa.busca) return;
@@ -1011,7 +1019,7 @@ function casaAtualizar(tentativa) {
     var luz = casaAchar(blocos, CASA.light, 'light');
     if (!ar && !luz) {
       casaRender();
-      casaStatus('não achei "' + CASA.climate + '" nem "' + CASA.light + '" (exponha ao Assist)', 'erro');
+      casaStatus(tx('home_not_found', {climate: CASA.climate, light: CASA.light}), 'erro');
       return;
     }
     if (!casa.conf) casa.conf = {ar: {on: false, alvo: null}, luz: {on: false}};
@@ -1033,7 +1041,7 @@ function casaAtualizar(tentativa) {
     if (secao) secao.classList.remove('indisp');
     casaRender();
     var n = new Date();
-    casaStatus('atualizado ' + dois(n.getHours()) + ':' + dois(n.getMinutes()), '');
+    casaStatus(tx('home_updated', {time: dois(n.getHours()) + ':' + dois(n.getMinutes())}), '');
     if (casa.pendente) casaAgendar(3000);   /* still waiting for what the user asked */
   });
 }
@@ -1047,22 +1055,22 @@ function casaResultado(r) {
   return 'ok';
 }
 function casaChamar(nome, args, reverter, chave) {
-  casaStatus('enviando…', 'espera');
+  casaStatus(tx('home_sending'), 'espera');
   reqPrazo('tools/call', {name: nome, arguments: args}).then(function (r) {
     var res = casaResultado(r);
     if (res !== 'ok') {
       reverter(); delete casa.espera[chave]; casa.seq++; casaRender();
       if (res === 'indisp') { casaIndisponivel(); return; }
-      casaStatus('falhou: o Home Assistant recusou', 'erro');
+      casaStatus(tx('home_refused'), 'erro');
     }
     casaAgendar();                       /* the real state decides in the end */
   });
 }
 function casaLivre() {
   if (resting || !CASA) return false;
-  if (!pronto) { casaStatus('conectando…', 'espera'); return false; }
-  if (casa.ok === null) { casaStatus('carregando…', 'espera'); return false; }   /* nothing real to flip yet */
-  if (limite()) { casaStatus('muitos toques, aguarde', 'erro'); return false; }
+  if (!pronto) { casaStatus(tx('home_connecting'), 'espera'); return false; }
+  if (casa.ok === null) { casaStatus(tx('home_loading'), 'espera'); return false; }   /* nothing real to flip yet */
+  if (limite()) { casaStatus(tx('status_too_many_taps'), 'erro'); return false; }
   return true;
 }
 function casaAlternar(qual) {
@@ -1079,7 +1087,7 @@ function casaAlternar(qual) {
 function casaPasso(delta) {
   if (!casaLivre()) return;
   var a = casa.ar;
-  if (typeof a.alvo !== 'number') { casaStatus('sem temperatura alvo neste modo', 'erro'); return; }
+  if (typeof a.alvo !== 'number') { casaStatus(tx('home_no_target'), 'erro'); return; }
   var novo = Math.max(CASA.temp_min, Math.min(CASA.temp_max, a.alvo + delta));
   if (novo === a.alvo) return;
   a.alvo = novo; casa.seq++;
@@ -1091,13 +1099,13 @@ function casaPasso(delta) {
 function casaEnviarTemp() {
   var a = casa.ar;
   if (limite()) {
-    casaStatus('muitos toques, aguarde', 'erro');
+    casaStatus(tx('status_too_many_taps'), 'erro');
     casa.tempTimer = setTimeout(casaEnviarTemp, 2000);
     return;
   }
   var enviado = a.alvo;
   casa.tempTimer = 0; casa.tempEnvio++;
-  casaStatus('enviando…', 'espera');
+  casaStatus(tx('home_sending'), 'espera');
   reqPrazo('tools/call', {name: HA_TOOLS.temp, arguments: {name: CASA.climate, temperature: enviado}})
     .then(function (r) {
       casa.tempEnvio--;
@@ -1109,7 +1117,7 @@ function casaEnviarTemp() {
         delete casa.espera.alvo;
         casa.seq++; casaRender();
         if (res === 'indisp') { casaIndisponivel(); return; }
-        casaStatus('falhou: o Home Assistant recusou', 'erro');
+        casaStatus(tx('home_refused'), 'erro');
       }
       casaAgendar();
     });
@@ -1164,8 +1172,7 @@ function refreshSwitch(name, active, onText) {
 }
 
 function refreshRestSwitch() {
-  refreshSwitch('descanso', restEnabled,
-    'Ligado — a tela escurece depois de ' + restSeconds + ' s sem toque');
+  refreshSwitch('descanso', restEnabled, tx('settings_rest_on', {seconds: restSeconds}));
 }
 
 function clockPageIndex() {
@@ -1247,8 +1254,8 @@ function alertaAtualizarAprovar() {
   if (a && a.actionable === true && alertaPodeAprovar && !ok) {
     var r = a.request;
     msg = (r && r.truncated === false && typeof a.nonce === 'string' && a.nonce)
-      ? 'Role o texto até o fim para liberar Aprovar'
-      : 'Texto longo/oculto — aprove no PC';
+      ? tx('alert_scroll_to_approve')
+      : tx('alert_long_text');
   }
   if (!alertaNotaTimer) { var av = el('alerta-aviso'); if (av) av.textContent = msg; }
 }
@@ -1291,7 +1298,7 @@ function aplicarAlertas(lista, podeAprovar) {
   banner.classList.toggle('acionavel', acionavel);
   banner.classList.toggle('semaprovar', !alertaPodeAprovar);
   var projeto = String(a.project || '').slice(0, 60) || 'Claude';
-  el('alerta-t1').textContent = projeto + ' pede permissão';
+  el('alerta-t1').textContent = tx('alert_asks_permission', {project: projeto});
   el('alerta-tool').textContent = acionavel ? String(a.request.tool || '').slice(0, 140) : '';
   var t2 = el('alerta-t2');
   t2.classList.toggle('mono', acionavel);
@@ -1320,16 +1327,16 @@ function responderAlerta(a, decisao) {
   if (!a || a.actionable !== true || (decisao !== 'allow' && decisao !== 'deny')) return;
   if (!alertaAtual || alertaChave(alertaAtual) !== alertaChave(a)) return;
   if (decisao === 'allow' && !alertaPodeAprovarEste(a)) return;
-  if (typeof a.nonce !== 'string' || !a.nonce) { alertaNota('Sem chave de resposta — responda no PC'); return; }
-  if (!pronto) { alertaNota('Sem conexão com o PC — nada foi enviado'); aviso('conectando', 'espera'); return; }
-  if (limite()) { alertaNota('Muitos toques, aguarde'); aviso('muitos toques, aguarde', 'erro'); return; }
+  if (typeof a.nonce !== 'string' || !a.nonce) { alertaNota(tx('alert_no_key')); return; }
+  if (!pronto) { alertaNota(tx('alert_no_connection')); aviso(tx('status_connecting'), 'espera'); return; }
+  if (limite()) { alertaNota(tx('alert_too_many_taps')); aviso(tx('status_too_many_taps'), 'erro'); return; }
   alertaCancelarSegurar();
   alertasDispensados[alertaChave(a)] = 1;
   alertaAtual = null;
   req('tools/call', {name: 'pc_alerta_responder', arguments: {id: a.id, decisao: decisao, nonce: a.nonce}});
   var banner = el('alerta');
   banner.classList.add('enviado');
-  el('alerta-t1').textContent = 'enviado…';
+  el('alerta-t1').textContent = tx('alert_sent');
   el('alerta-mais').textContent = '';
   alertaEnviadoAte = Date.now() + 1200;
   setTimeout(function () { alertaEnviadoAte = 0; aplicarAlertas(alertasUltima); }, 1250);

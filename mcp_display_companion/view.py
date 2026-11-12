@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from pathlib import Path
 
 from .config import Action, Config
 from .icons import ICONS, PLAY_STATE_ICONS, symbol_def
+from .strings import DEFAULT_LANGUAGE, all_texts, t
 
 DEFAULT_ACCENT = "#5b4de0"
 
@@ -32,13 +34,33 @@ WEATHER_CARD = '''<div class="card">
           <svg id="icone" aria-hidden="true"><use href="#i-parcial"/></svg>
           <div id="temp">--</div>
         </div>
-        <div id="cond">aguardando dados</div>
-        <div class="meta"><span id="cidade">weather</span><span id="atual"></span></div>
+        <div id="cond">{{T:weather_waiting}}</div>
+        <div class="meta"><span id="cidade">{{T:weather_city_placeholder}}</span><span id="atual"></span></div>
       </div>'''
 
 
 def _esc(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+# A text marker (`T:` plus a key, in double braces) in the template or in the HTML
+# constants below is a fixed text of the
+# screen, replaced by the panel language. An unknown key raises `KeyError`, so a
+# typo fails in `render()` (and in a test), never on the screen.
+_TEXT_MARKER = re.compile(r"\{\{T:([a-z0-9_]+)\}\}")
+
+
+def _texts(text: str, language: str) -> str:
+    return _TEXT_MARKER.sub(lambda m: _esc(t(language, m.group(1))), text)
+
+
+def _texts_script(language: str) -> str:
+    """The `T` object the screen script reads, as JSON that is safe inside <script>."""
+    data = json.dumps(all_texts(language), ensure_ascii=False)
+    # `<` would let "</script>" end the block; U+2028/2029 break older JS parsers
+    for raw, safe in (("<", "\\u003c"), ("\u2028", "\\u2028"), ("\u2029", "\\u2029")):
+        data = data.replace(raw, safe)
+    return data
 
 
 def _tint(color: str, alpha: str = "1f") -> str:
@@ -79,7 +101,7 @@ def button_html(action: Action) -> str:
     )
 
 
-def featured_html(action: Action | None) -> str:
+def featured_html(action: Action | None, language: str = DEFAULT_LANGUAGE) -> str:
     """The large button on page 1. Shows cover art and track title for media actions."""
     if action is None:
         return ""
@@ -97,8 +119,8 @@ def featured_html(action: Action | None) -> str:
             '        <div id="banner-capa" class="capa-banner"></div>\n'
             '        <span class="ico-midia">' + icon + "</span>\n"
             '        <span class="txt-midia">\n'
-            '          <span id="faixa">Mídia no computador</span>\n'
-            '          <span id="sub">aguardando o player</span>\n'
+            f'          <span id="faixa">{_esc(t(language, "media_default_title"))}</span>\n'
+            f'          <span id="sub">{_esc(t(language, "media_waiting_player"))}</span>\n'
             "        </span>\n"
             "      </button>"
         )
@@ -153,6 +175,7 @@ def settings_html(config: Config) -> str:
     The true state lives on the PC -- the screen reflects what `update_view` sends.
     """
     lines: list[str] = []
+    language = config.view.language
 
     rest_pair = _pair(config.page3, "rest")
     if rest_pair:
@@ -160,9 +183,9 @@ def settings_html(config: Config) -> str:
             "descanso",
             rest_pair[0],
             rest_pair[1],
-            "Modo descanso",
-            "Desligado — a tela fica sempre acesa",
-            f"Ligado — a tela escurece depois de {config.rest.idle_s} s sem toque",
+            t(language, "settings_rest_title"),
+            t(language, "settings_rest_off"),
+            t(language, "settings_rest_on", seconds=config.rest.idle_s),
         ))
 
     overlay_pair = _pair(config.page3, "overlay")
@@ -171,9 +194,9 @@ def settings_html(config: Config) -> str:
             "relogio",
             overlay_pair[0],
             overlay_pair[1],
-            "Relógio sobre as fotos",
-            "Desligado — a foto fica limpa, sem nada por cima",
-            "Ligado — hora grande e translúcida sobre a imagem",
+            t(language, "settings_clock_title"),
+            t(language, "settings_clock_off"),
+            t(language, "settings_clock_on"),
         ))
 
     if lines:
@@ -211,7 +234,7 @@ HOME_ICONS = ("snowflake", "bulb", "power", "minus", "plus")
 
 SHORTCUTS_PAGE = """<section class="pagina" id="p2">
       <div id="topo-p2">
-        <div id="titulo">Atalhos</div>
+        <div id="titulo">{{T:shortcuts_title}}</div>
       </div>
       <div id="grid-atalhos">
         {botoes}
@@ -227,25 +250,25 @@ HOME_PAGE = """<section class="pagina pagina-casa" id="p3" data-casa-cfg="{dados
       </div>
       <div id="casa-cartoes">
         <div class="casa-card" id="casa-ar">
-          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-snowflake"/></svg><span>Ar</span></div>
+          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-snowflake"/></svg><span>{{T:home_air}}</span></div>
           <button class="casa-power" data-casa-btn="ar" aria-pressed="false">
             <svg aria-hidden="true"><use href="#i-power"/></svg><span id="ar-estado">—</span>
           </button>
           <div class="casa-temp">
-            <button class="casa-passo" data-casa-btn="menos" aria-label="Diminuir temperatura"><svg aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <button class="casa-passo" data-casa-btn="menos" aria-label="{{T:home_temp_down}}"><svg aria-hidden="true"><use href="#i-minus"/></svg></button>
             <div id="ar-alvo">--°</div>
-            <button class="casa-passo" data-casa-btn="mais" aria-label="Aumentar temperatura"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <button class="casa-passo" data-casa-btn="mais" aria-label="{{T:home_temp_up}}"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
           </div>
           <div class="casa-sala" id="ar-sala"></div>
         </div>
         <div class="casa-card" id="casa-luz">
-          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-bulb"/></svg><span>Luz</span></div>
+          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-bulb"/></svg><span>{{T:home_light}}</span></div>
           <button class="casa-luz-btn" data-casa-btn="luz" aria-pressed="false">
             <svg aria-hidden="true"><use href="#i-bulb"/></svg><span id="luz-estado">—</span>
           </button>
         </div>
       </div>
-      <div id="casa-status">aguardando o Home Assistant</div>
+      <div id="casa-status">{{T:home_waiting}}</div>
     </section>"""
 
 
@@ -265,14 +288,15 @@ def home_page_html(config: Config) -> str:
         },
         ensure_ascii=False,
     )
-    return HOME_PAGE.format(dados=_esc(dados), titulo=_esc(home.title))
+    page = _texts(HOME_PAGE, config.view.language)
+    return page.format(dados=_esc(dados), titulo=_esc(home.title))
 
 
 # Settings is `p3` (as in templates written before the home page existed) and
 # moves to `p4` only when the home page takes `p3`. The class is stable.
 SETTINGS_PAGE = """<section class="pagina pagina-ajustes" id="p{n}">
       <div id="topo-p{n}">
-        <div id="titulo{n}">Ajustes</div>
+        <div id="titulo{n}">{{T:settings_title}}</div>
       </div>
       <div id="config-lista">
         {acoes}
@@ -357,6 +381,8 @@ def render(
         raise FileNotFoundError(f"View template not found: {path} ({exc})") from None
 
     slides_flag = has_slides if has_slides is not None else tem_slides
+    language = config.view.language
+    html_template = _texts(html_template, language)
 
     p1: list[str] = []
     if config.view.show_clock:
@@ -367,7 +393,7 @@ def render(
     if featured is not None:
         p1.append("com-destaque")
 
-    weather = WEATHER_CARD if (config.view.show_weather and config.weather.enabled) else ""
+    weather = _texts(WEATHER_CARD, language) if (config.view.show_weather and config.weather.enabled) else ""
     clock = CLOCK_CARD if config.view.show_clock else ""
 
     # Each track page exists only when it has content: an empty section would
@@ -375,14 +401,14 @@ def render(
     slides_page = slides_page_html(config, has_images=slides_flag)
     slides_bg = slides_background_html(config, has_images=slides_flag)
     shortcuts_page = (
-        SHORTCUTS_PAGE.format(
+        _texts(SHORTCUTS_PAGE, language).format(
             botoes="\n        ".join(button_html(a) for a in config.page2)
         )
         if config.page2 else ""
     )
     home_page = home_page_html(config) if HOME_MARKER in html_template else ""
     settings_page = (
-        SETTINGS_PAGE.format(n=4 if home_page else 3, acoes=settings_html(config)) if config.page3 else ""
+        _texts(SETTINGS_PAGE, language).format(n=4 if home_page else 3, acoes=settings_html(config)) if config.page3 else ""
     )
 
     if slides_page:
@@ -399,17 +425,19 @@ def render(
         order.append("ajustes")
     dots = "".join(
         f'<button class="ponto{" on" if i == 0 else ""}" data-p="{i}" '
-        f'aria-label="Page {i + 1}"><i></i></button>'
+        f'aria-label="{_esc(t(language, "nav_page", n=i + 1))}"><i></i></button>'
         for i in range(len(order))
     )
 
     replacements = {
+        "{{LANG}}": _esc(language),
         "{{TITLE}}": _esc(config.view.title),
+        "{{TEXTS_JSON}}": _texts_script(language),
         "{{SYMBOLS}}": symbols_html(config),
         "{{P1_CLASSES}}": " ".join(p1),
         "{{CLOCK_CARD}}": clock,
         "{{WEATHER_CARD}}": weather,
-        "{{FEATURED}}": featured_html(featured),
+        "{{FEATURED}}": featured_html(featured, language),
         "{{PAGINA_SLIDES}}": slides_page,
         "{{PAGINA_SLIDES_FUNDO}}": slides_bg,
         "{{PAGINA_ATALHOS}}": shortcuts_page,

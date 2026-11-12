@@ -159,3 +159,20 @@ def test_home_invalid(load_config, raw_config, home):
     raw_config['home'] = home
     with pytest.raises(ConfigError):
         load_config(raw_config)
+
+
+def test_view_language_defaults_to_english(load_config, raw_config):
+    view = load_config(raw_config).view
+    assert (view.language, view.title) == ('en', 'Panel')
+
+
+def test_view_language_accepts_pt_br(load_config, raw_config):
+    raw_config['view'] = {'language': 'pt-BR'}
+    assert load_config(raw_config).view.language == 'pt-BR'
+
+
+@pytest.mark.parametrize('value', ['fr', 'pt', 'EN', '', None, 1, ['en']])
+def test_view_language_rejects_unknown_value(load_config, raw_config, value):
+    raw_config['view'] = {'language': value}
+    with pytest.raises(ConfigError, match=r'view\.language.*en, pt-BR'):
+        load_config(raw_config)

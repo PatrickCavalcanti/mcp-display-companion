@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .strings import DEFAULT_LANGUAGE, LANGUAGES
+
 # Action types that the service knows how to execute. See docs/actions.md.
 ACTION_TYPES = {
     "media",    # play/pause, next, previous (Windows: GSMTC; otherwise: media keys)
@@ -408,9 +410,10 @@ class HomeSection:
 @dataclass(frozen=True)
 class ViewSection:
     template: Path = field(default_factory=default_template)
-    title: str = "Painel"
+    title: str = "Panel"
     show_clock: bool = True
     show_weather: bool = True
+    language: str = DEFAULT_LANGUAGE
 
 
 @dataclass(frozen=True)
@@ -669,11 +672,17 @@ def load(path: str | Path) -> Config:
     template = expand_path(str(template_raw)) if template_raw else default_template()
     if not template.is_absolute():
         template = base_dir / template
+    language = view_raw.get("language", DEFAULT_LANGUAGE)
+    if language not in LANGUAGES:
+        raise ConfigError(
+            f"view.language must be one of {', '.join(LANGUAGES)}, got {language!r}"
+        )
     view = ViewSection(
         template=template,
-        title=str(view_raw.get("title") or "Painel"),
+        title=str(view_raw.get("title") or "Panel"),
         show_clock=bool(view_raw.get("show_clock", True)),
         show_weather=bool(view_raw.get("show_weather", True)),
+        language=language,
     )
 
     home_raw = raw.get("home") or {}

@@ -88,6 +88,18 @@ def default_template() -> Path:
     return Path(__file__).resolve().parent / "templates" / "painel.html"
 
 
+def default_alerts_dir() -> Path:
+    """Where the Claude Code hook drops one file per session waiting for permission."""
+    custom = os.environ.get("PANEL_COMPANION_ALERTS")
+    if custom:
+        return expand_path(custom)
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "mcp-display-companion" / "alerts"
+
+
 def default_cursor_path() -> Path:
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home()))
@@ -362,6 +374,19 @@ class RestSection:
 
 
 @dataclass(frozen=True)
+class AlertsSection:
+    """Big banner on the panel while a Claude Code session waits for permission."""
+
+    enabled: bool = True
+    dir: Path = field(default_factory=default_alerts_dir)
+    max_age_s: int = 1800
+    wake: bool = True
+    brightness: str | int = "max"
+    allow_approve: bool = False  # True: the panel may approve (hold the button); False: deny only
+    dir_from_config: bool = False  # `dir` came from config.json (the hook only reads the env var)
+
+
+@dataclass(frozen=True)
 class HomeSection:
     """Home control page (Home Assistant, reached by the panel's mixed screen).
 
@@ -401,6 +426,7 @@ class Config:
     media: MediaSection = field(default_factory=MediaSection)
     view: ViewSection = field(default_factory=ViewSection)
     home: HomeSection = field(default_factory=HomeSection)
+    alerts: AlertsSection = field(default_factory=AlertsSection)
     base_dir: Path = field(default_factory=Path.cwd)
 
     @property
@@ -677,6 +703,34 @@ def load(path: str | Path) -> Config:
     if home.temp_min >= home.temp_max:
         raise ConfigError("home.temp_min must be lower than home.temp_max")
 
+    alerts_raw = raw.get("alerts") or {}
+    if not isinstance(alerts_raw, dict):
+        raise ConfigError("'alerts' must be an object")
+    for key in ("enabled", "wake", "allow_approve"):
+        if not isinstance(alerts_raw.get(key, True), bool):
+            raise ConfigError(f"alerts.{key} must be true or false, got {alerts_raw[key]!r}")
+    alerts_dir_raw = alerts_raw.get("dir")
+    if alerts_dir_raw is not None and (not isinstance(alerts_dir_raw, str) or not alerts_dir_raw.strip()):
+        raise ConfigError(f"alerts.dir must be a non-empty string, got {alerts_dir_raw!r}")
+    alerts_dir = expand_path(alerts_dir_raw) if alerts_dir_raw else default_alerts_dir()
+    if not alerts_dir.is_absolute():
+        alerts_dir = base_dir / alerts_dir
+    alerts_brightness = alerts_raw.get("brightness", display.brightness)
+    if not (
+        isinstance(alerts_brightness, int) and not isinstance(alerts_brightness, bool)
+        and 0 <= alerts_brightness <= 100
+    ) and alerts_brightness not in {"max", "min", "auto", "off"}:
+        raise ConfigError("alerts.brightness must be max, min, auto, off or 0..100")
+    alerts = AlertsSection(
+        enabled=alerts_raw.get("enabled", True),
+        dir=alerts_dir,
+        max_age_s=_as_int(alerts_raw.get("max_age_s", 1800), "alerts.max_age_s", 10),
+        wake=alerts_raw.get("wake", True),
+        brightness=alerts_brightness,
+        allow_approve=alerts_raw.get("allow_approve", False),
+        dir_from_config=bool(alerts_dir_raw),
+    )
+
     return Config(
         panel=panel,
         actions=actions,
@@ -689,5 +743,6 @@ def load(path: str | Path) -> Config:
         media=media,
         view=view,
         home=home,
+        alerts=alerts,
         base_dir=base_dir,
     )

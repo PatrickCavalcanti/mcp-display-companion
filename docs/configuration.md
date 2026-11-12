@@ -166,6 +166,131 @@ survives a reload of the screen.
 ]
 ```
 
+## `alerts` — Claude Code asking for permission
+
+When any Claude Code session on this PC stops to ask for a **permission**, the
+panel shows a big **red** banner over whatever page is visible ("`<project>` pede
+permissão", the tool, and what it wants to do), wakes the screen, and drops the
+banner by itself as soon as you answer on the PC. With several sessions waiting
+the newest shows, with a `+N` badge.
+
+From the panel you can answer too (when the hook runs as `PermissionRequest`):
+
+* **Negar**: one tap.
+* **Aprovar**: press and **hold 1.5 s** (a green fill shows the progress; release
+  early or move the finger to cancel). It only exists when you can read the whole
+  request: if the text was cut ("Texto longo/oculto — aprove no PC") or does not fit
+  the box until you scroll it to the end, only Negar and × are offered. The hold
+  approves the request that was on screen when you pressed; if another one takes
+  its place, the hold is cancelled.
+* **×**: hides the banner without answering (the PC dialog stays).
+
+Approving from a wall panel is off by default (`allow_approve: false`: the panel
+can only deny). Turn it on only if you accept that whoever can touch the panel can
+approve what Claude Code asks to run. The request text is shown in full for `Bash`
+up to 1000 characters; a longer command, or a `Bash` call with unusual options
+(for example `dangerouslyDisableSandbox`), is marked as cut and cannot be approved
+from the panel. Other tools show their input as compact JSON up to 600
+characters. MCP tools show as `<server>: <operation>`.
+
+Without `PermissionRequest` (only the `Notification` fallback) the banner is just
+a warning: a tap on it hides it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | watch the alerts folder |
+| `dir` | `%APPDATA%\mcp-display-companion\alerts` / `~/.config/mcp-display-companion/alerts` (env `PANEL_COMPANION_ALERTS` overrides the default) | folder where the hook drops its files. **The hook only reads the env var `PANEL_COMPANION_ALERTS`**, never `config.json`: if you set `alerts.dir`, set the same path in that env var for Claude Code too (the service logs a warning at startup when `alerts.dir` is set) |
+| `max_age_s` | `1800` | older files are ignored and deleted (a hook that never saw the answer must not leave the banner up forever; minimum 10). A permission **request** is dropped after 300 s whatever this value is |
+| `wake` | `true` | on a **new** alert: leave rest mode on the View and set the brightness below |
+| `brightness` | same as `display.brightness` | `max`, `min`, `auto`, `off` or `0`..`100`, used while an alert shows (needs `display.enabled`) |
+| `allow_approve` | `false` | `true`: the panel may **approve** (hold the Aprovar button). `false`: it can only deny (the button is hidden and the service never writes `allow`) |
+
+> **Security.** The alerts folder is a trust boundary: whoever can write
+> `*.answer` files there can approve tool calls. Keep it in a private per-user
+> folder; **never** put it in a shared, synced or network folder (OneDrive, Dropbox,
+> a share), or other people and devices could approve what Claude Code runs. The
+> service also accepts answers only from the View it published itself and only with
+> the per-alert secret it sent to that View (kept in memory, never written to disk).
+
+The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
+Register it in `~/.claude/settings.json`.
+
+> **Test one terminal (CLI) session first.** The Claude desktop app shows its own
+> dialog and races the hook, so either answer wins. The CLI may instead *wait* for
+> the `PermissionRequest` hook (up to its timeout) before showing the prompt. Register
+> the hook, run a command that asks for permission in a terminal session, and check
+> that the prompt still shows up promptly before you keep it registered globally.
+
+Do **not** call the script directly (`python script.py`): if the file is missing,
+Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
+"block / deny". Use this launcher instead: it exits 0 with no output when the
+script does not exist, and passes the script's own exit 0 through (use forward
+slashes in the path; `-I -S` keeps Python fast and isolated):
+
+* for the clear and `Notification` hooks (asynchronous):
+
+```
+C:/Python313/python.exe -I -S -c "import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
+```
+
+* for the `PermissionRequest` hook (synchronous, timeout above the hook's own 290 s
+  wait, `onFailure` continue so a crash falls back to the normal PC dialog): the
+  same command line, with `"timeout": 300` and `"onFailure": "continue"`.
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "timeout": 300, "onFailure": "continue",
+      "command": "C:/Python313/python.exe -I -S -c \"import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')\"" }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "async": true,
+      "command": "...same command..." }] }],
+    "PostToolUse":        [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "UserPromptSubmit":   [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "Stop":               [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "SessionEnd":         [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }]
+  }
+}
+```
+
+If `alerts.dir` is set (see the table), also set `PANEL_COMPANION_ALERTS` to the same
+path in the environment Claude Code runs in.
+
+How it works:
+
+* `PermissionRequest` writes `<session>-<h>-<random>.json` (`{session, project,
+  message, at, request: {tool, summary, truncated}, actionable: true}`; `h` is a
+  short hash of the tool call) and waits for the same name with `.answer`
+  (`allow` or `deny`). On an answer it prints the decision JSON for Claude Code and
+  removes both files. The Claude desktop app also shows its own dialog; whichever
+  answers first wins. If you answer on the PC, the clear events below delete the
+  file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
+  `mcp__ccd_*` tools are never offered for approval (the hook does nothing).
+* `Notification` writes the plain `<session>.json`, unless a request alert of that
+  session already exists.
+* `PostToolUse` and `PostToolUseFailure` delete `<session>.json` and only the
+  request files of that same tool call (same `h`), so parallel calls and subagents
+  of one session keep their own banners. `UserPromptSubmit`, `Stop` and
+  `SessionEnd` delete every file of that session.
+* The hook prints nothing except a decision, and always exits 0. Test knob: env
+  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait.
+
+The View sends the reserved tools `pc_alerta_dispensar` (arguments `{id}`) and
+`pc_alerta_responder` (arguments `{id, decisao: "allow"|"deny"}`). Like `pc_rest_*`
+they are handled by the service and need no entry in `actions`. The id must
+match `[A-Za-z0-9_-]{1,80}` and is required; dismiss only deletes `<id>.json` of a
+known alert and respond only writes `<id>.answer`, both inside `dir`, and respond
+only for an existing, fresh (under 300 s), actionable alert, with the `nonce` that
+the service sent for it. Both are ignored unless the touch comes from the View
+the service published (`apresentacao`). The list reaches the View as
+`update_view({"alertas": [{id, project, message, at, actionable?, nonce?, request?}, ...],
+"allow_approve": false})` (empty list when none) and is sent again after every
+reconnect or republish. It never republishes the View by itself: if the panel
+rejects the list, it retries the same list every 30 s and logs once. Files left
+behind (`*.answer` without a request, `.*.tmp` older than 60 s) are swept. Custom templates need the `#alerta` banner and the
+`aplicarAlertas` logic of `templates/painel.html`; `simularAlertas([...])` in a
+browser console previews it.
+
 ## `home` — home control page (Home Assistant)
 
 An optional page between the shortcuts and the settings: air conditioner (power,

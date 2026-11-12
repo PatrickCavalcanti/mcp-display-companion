@@ -163,6 +163,17 @@
       ]
     }
   ],
+  "home": {
+    "enabled": false,
+    "connection": "home-assistant",
+    "title": "Escritório",
+    "climate": "Ar Escritório",
+    "light": "Luz Escritório",
+    "area": "Escritório",
+    "refresh_s": 30,
+    "temp_min": 16,
+    "temp_max": 30
+  },
   "rest": {
     "enabled": false,
     "idle_s": 60

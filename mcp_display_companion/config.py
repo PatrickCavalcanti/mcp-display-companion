@@ -362,6 +362,25 @@ class RestSection:
 
 
 @dataclass(frozen=True)
+class HomeSection:
+    """Home control page (Home Assistant, reached by the panel's mixed screen).
+
+    The View calls the Home Assistant MCP tools directly, so this section only
+    names the connection and the entities to show.
+    """
+
+    enabled: bool = False
+    connection: str = "home-assistant"
+    title: str = "Escritório"
+    climate: str = "Ar Escritório"
+    light: str = "Luz Escritório"
+    area: str = "Escritório"
+    refresh_s: int = 30
+    temp_min: int = 16
+    temp_max: int = 30
+
+
+@dataclass(frozen=True)
 class ViewSection:
     template: Path = field(default_factory=default_template)
     title: str = "Painel"
@@ -381,6 +400,7 @@ class Config:
     weather: WeatherSection = field(default_factory=WeatherSection)
     media: MediaSection = field(default_factory=MediaSection)
     view: ViewSection = field(default_factory=ViewSection)
+    home: HomeSection = field(default_factory=HomeSection)
     base_dir: Path = field(default_factory=Path.cwd)
 
     @property
@@ -630,6 +650,33 @@ def load(path: str | Path) -> Config:
         show_weather=bool(view_raw.get("show_weather", True)),
     )
 
+    home_raw = raw.get("home") or {}
+    if not isinstance(home_raw, dict):
+        raise ConfigError("'home' must be an object")
+
+    def home_text(key: str, default: str) -> str:
+        value = home_raw.get(key, default)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"home.{key} must be a non-empty string, got {value!r}")
+        return value.strip()
+
+    home_enabled = home_raw.get("enabled", False)
+    if not isinstance(home_enabled, bool):
+        raise ConfigError(f"home.enabled must be true or false, got {home_enabled!r}")
+    home = HomeSection(
+        enabled=home_enabled,
+        connection=home_text("connection", "home-assistant"),
+        title=home_text("title", "Escritório"),
+        climate=home_text("climate", "Ar Escritório"),
+        light=home_text("light", "Luz Escritório"),
+        area=home_text("area", "Escritório"),
+        refresh_s=_as_int(home_raw.get("refresh_s", 30), "home.refresh_s", 5),
+        temp_min=_as_int(home_raw.get("temp_min", 16), "home.temp_min", 5),
+        temp_max=_as_int(home_raw.get("temp_max", 30), "home.temp_max", 5),
+    )
+    if home.temp_min >= home.temp_max:
+        raise ConfigError("home.temp_min must be lower than home.temp_max")
+
     return Config(
         panel=panel,
         actions=actions,
@@ -641,5 +688,6 @@ def load(path: str | Path) -> Config:
         weather=weather,
         media=media,
         view=view,
+        home=home,
         base_dir=base_dir,
     )

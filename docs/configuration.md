@@ -153,7 +153,7 @@ The View tells the service this with two **reserved tool names**, handled by the
 service rather than by the configuration: `pc_rest_entered` (went dark) and
 `pc_rest_left` (woke up). They are not actions and cannot be changed.
 
-Page 3 — the settings page — exists when the config has a pair of `rest` actions
+Settings page (the `pages: [3]` of an action; `p3` in the View, or `p4` when the home page exists; style it by the class `pagina-ajustes`) — exists when the config has a pair of `rest` actions
 (`state: true` and `state: false`). The switch calls the one that matches the
 **new** state; the PC stores the value and sends it back on every publish, so it
 survives a reload of the screen.
@@ -164,6 +164,39 @@ survives a reload of the screen.
   { "id": "pc_descanso_ativar",   "label": "Ativar descanso",   "type": "rest", "state": true,  "pages": [3] },
   { "id": "pc_descanso_desativar", "label": "Desativar descanso", "type": "rest", "state": false, "pages": [3] }
 ]
+```
+
+## `home` — home control page (Home Assistant)
+
+An optional page between the shortcuts and the settings: air conditioner (power,
+target temperature, room temperature) and a light, for one room. The buttons call
+the Home Assistant MCP tools **directly from the panel** (a "mixed screen": the
+companion publishes the View with `connection`, and the panel sends the calls the
+destination knows straight to it), so they keep working with the PC off. If Home
+Assistant is unreachable the page says so and dims.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | the page exists only when `true` |
+| `connection` | `"home-assistant"` | name of the MCP connection approved on the phone (the destination) |
+| `title` | `"Escritório"` | title of the page |
+| `climate` | `"Ar Escritório"` | friendly name of the climate entity |
+| `light` | `"Luz Escritório"` | friendly name of the light entity |
+| `area` | `"Escritório"` | kept for compatibility; no longer used (the state is read by name and domain) |
+| `refresh_s` | `30` | seconds between state refreshes (minimum 5); a refresh also runs after each action |
+| `temp_min` / `temp_max` | `16` / `30` | limits of the − / + buttons (1 °C steps) |
+
+Page order is slideshow (`p0`), clock (`p1`), shortcuts (`p2`), **home (`p3`)**,
+settings (`p4`, or `p3` when there is no home page); each exists only when it has content. The tools used (prefixed
+as the Home Assistant server publishes them) are `intent__HassTurnOn`,
+`intent__HassTurnOff`, `climate__HassClimateSetTemperature` and
+`homeassistant__GetLiveContext`. If the panel cannot reach the destination it
+turns such a call into an event for the companion, which only logs
+`home assistant unreachable: <tool>` (failed state refreshes are logged at most once per 10 minutes). The entities must be **exposed to Assist** in Home Assistant to appear. A custom `view.template` must contain the
+`{{PAGINA_CASA}}` placeholder (after `{{PAGINA_ATALHOS}}`) to show the page; without it the page is dropped (and the service logs `template has no {{PAGINA_CASA}}; home page disabled`).
+
+```json
+"home": { "enabled": true, "connection": "home-assistant", "climate": "Ar Escritório", "light": "Luz Escritório", "area": "Escritório" }
 ```
 
 ## `view`

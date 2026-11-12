@@ -112,3 +112,13 @@ def test_show_view_returns_presentation(server):
     client, requests, _ = server
     assert client.show_view('<html>test</html>', title='Test') == 'screen-1'
     assert requests[-1][1]['params'] == {'name': 'show_view', 'arguments': {'html': '<html>test</html>', 'ttl_min': 0, 'title': 'Test'}}
+
+
+def test_show_view_sends_connection_only_when_given(server):
+    client, requests, _ = server
+    client.connect()
+    client.show_view('<p>x</p>', title='T')
+    client.show_view('<p>x</p>', title='T', connection='home-assistant')
+    calls = [p['params']['arguments'] for _, p in requests if p.get('method') == 'tools/call']
+    assert 'connection' not in calls[0]
+    assert calls[1]['connection'] == 'home-assistant'

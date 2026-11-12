@@ -142,3 +142,20 @@ def test_explicit_zero_coordinates_are_valid(load_config, raw_config, latitude, 
 def test_valid_action_parameter_boundaries(load_config, raw_config, kind, params):
     raw_config['actions'] = [{'id': 'pc_valid', 'type': kind, **params}]
     assert load_config(raw_config).actions[0].params == params
+
+
+def test_home_defaults_and_values(load_config, raw_config):
+    cfg = load_config(raw_config)
+    assert cfg.home.enabled is False and cfg.home.connection == 'home-assistant'
+    raw_config['home'] = {'enabled': True, 'climate': 'AC', 'temp_min': 18, 'temp_max': 28, 'refresh_s': 10}
+    home = load_config(raw_config).home
+    assert (home.enabled, home.climate, home.temp_min, home.temp_max, home.refresh_s) == (True, 'AC', 18, 28, 10)
+    assert home.title == 'Escritório' and home.area == 'Escritório'
+
+
+@pytest.mark.parametrize('home', [{'enabled': 'yes'}, {'climate': ''}, {'refresh_s': 'x'},
+                                  {'refresh_s': 1}, {'temp_min': 30, 'temp_max': 20}, 'x'])
+def test_home_invalid(load_config, raw_config, home):
+    raw_config['home'] = home
+    with pytest.raises(ConfigError):
+        load_config(raw_config)

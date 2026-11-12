@@ -38,6 +38,7 @@ FAST_POLL_S = 0.7
 POLL_RAPIDO_S = FAST_POLL_S
 # with SSE stream, polling serves only as a safety net
 SLOW_POLL_S = 5.0
+HOME_REFRESH_LOG_S = 600.0  # mute repeated "home assistant unreachable (refresh)" lines
 POLL_LENTO_S = SLOW_POLL_S
 WATCHDOG_LIMIT_S = 120
 WATCHDOG_LIMITE_S = WATCHDOG_LIMIT_S
@@ -121,6 +122,8 @@ class Runtime:
         self.config = config
         self.log = log
         self.clock = clock
+        self._home_warned = False
+        self._home_refresh_logged = float("-inf")
 
         self._loop = asyncio.new_event_loop()
 
@@ -227,7 +230,17 @@ class Runtime:
             else False
         )
         html = view.render(self.config, has_slides=has_slides)
-        self.presentation = self.client.show_view(html, ttl_min=0, title=self.config.view.title)
+        home = self.config.home
+        home_on = view.home_supported(self.config)
+        if home.enabled and not home_on and not self._home_warned:
+            self._home_warned = True
+            self.log("template has no {{PAGINA_CASA}}; home page disabled")
+        self.presentation = self.client.show_view(
+            html,
+            ttl_min=0,
+            title=self.config.view.title,
+            connection=home.connection if home_on else None,
+        )
         # newly published view is awake: reset dimmed screen flag
         self.screen_dark = False
         self.log(f"display published (presentation {self.presentation})")
@@ -445,6 +458,16 @@ class Runtime:
 
         if decision.kind == events.OLD:
             self.log(f"touch ignored (ev #{decision.event_id}): {decision.reason}")
+        elif decision.kind == events.FOREIGN and decision.tool in events.HOME_TOOLS:
+            # the mixed screen could not reach Home Assistant: nothing to run here
+            if decision.tool == "homeassistant__GetLiveContext":
+                now = self.clock()
+                if now - self._home_refresh_logged < HOME_REFRESH_LOG_S:
+                    return
+                self._home_refresh_logged = now
+                self.log("home assistant unreachable (refresh); further refresh failures muted for 10 min")
+            else:
+                self.log(f"home assistant unreachable: {decision.tool} (ev #{decision.event_id})")
         elif decision.kind == events.FOREIGN:
             self.log(f"touch from other screen ignored (ev #{decision.event_id}): {decision.reason}"
                      + (f" [{decision.tool}]" if decision.tool else ""))

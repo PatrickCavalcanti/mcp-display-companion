@@ -24,6 +24,15 @@ FOREIGN = "foreign"
 OLD = "old"
 MALFORMED = "malformed"
 
+# Home Assistant tools the home page calls. They normally go straight to
+# Home Assistant; they only reach us as touches when it was unreachable.
+HOME_TOOLS = frozenset({
+    "intent__HassTurnOn",
+    "intent__HassTurnOff",
+    "climate__HassClimateSetTemperature",
+    "homeassistant__GetLiveContext",
+})
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -60,11 +69,11 @@ def classify(
     if not isinstance(data, dict):
         return Decision(MALFORMED, reason="touch event without data", presentation=presentation,
                         event_id=event_id)
+    tool = str(data.get("tool") or "").strip()
     if data.get("destino_indisponivel"):
-        return Decision(FOREIGN, reason="connection destination did not respond",
+        return Decision(FOREIGN, tool=tool, reason="connection destination did not respond",
                         presentation=presentation, event_id=event_id)
 
-    tool = str(data.get("tool") or "").strip()
     if not tool:
         return Decision(MALFORMED, reason="touch event without tool name",
                         presentation=presentation, event_id=event_id)

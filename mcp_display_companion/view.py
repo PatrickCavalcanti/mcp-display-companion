@@ -9,6 +9,7 @@ gestures, touch feedback, offline indicator -- is handled by the template.
 from __future__ import annotations
 
 import html
+import json
 from pathlib import Path
 
 from .config import Action, Config
@@ -147,7 +148,7 @@ _par = _pair
 
 
 def settings_html(config: Config) -> str:
-    """Page 3 (settings): one switch toggle per action pair (`rest`, `overlay`).
+    """Page 4 (settings): one switch toggle per action pair (`rest`, `overlay`).
 
     The true state lives on the PC -- the screen reflects what `update_view` sends.
     """
@@ -185,6 +186,10 @@ def symbols_html(config: Config) -> str:
     """Only symbols referenced by configured actions (weather symbols are in template)."""
     parts: list[str] = []
     used: set[str] = set()
+    if config.home.enabled:
+        for name in HOME_ICONS:
+            used.add(name)
+            parts.append(symbol_def(name))
     for action in config.actions:
         if action.icon_svg:
             continue
@@ -201,6 +206,9 @@ def symbols_html(config: Config) -> str:
     return "\n  ".join(parts)
 
 
+# Icons the home page uses (the actions do not reference them).
+HOME_ICONS = ("snowflake", "bulb", "power", "minus", "plus")
+
 SHORTCUTS_PAGE = """<section class="pagina" id="p2">
       <div id="topo-p2">
         <div id="titulo">Atalhos</div>
@@ -211,9 +219,60 @@ SHORTCUTS_PAGE = """<section class="pagina" id="p2">
     </section>"""
 ATALHOS_PAGE = SHORTCUTS_PAGE
 
-SETTINGS_PAGE = """<section class="pagina" id="p3">
-      <div id="topo-p3">
-        <div id="titulo3">Ajustes</div>
+# Home control page. `{dados}` is a JSON object, HTML-escaped into an attribute;
+# the page script reads it with JSON.parse(getAttribute(...)).
+HOME_PAGE = """<section class="pagina pagina-casa" id="p3" data-casa-cfg="{dados}">
+      <div id="topo-casa">
+        <div id="titulo-casa">{titulo}</div>
+      </div>
+      <div id="casa-cartoes">
+        <div class="casa-card" id="casa-ar">
+          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-snowflake"/></svg><span>Ar</span></div>
+          <button class="casa-power" data-casa-btn="ar" aria-pressed="false">
+            <svg aria-hidden="true"><use href="#i-power"/></svg><span id="ar-estado">—</span>
+          </button>
+          <div class="casa-temp">
+            <button class="casa-passo" data-casa-btn="menos" aria-label="Diminuir temperatura"><svg aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <div id="ar-alvo">--°</div>
+            <button class="casa-passo" data-casa-btn="mais" aria-label="Aumentar temperatura"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="casa-sala" id="ar-sala"></div>
+        </div>
+        <div class="casa-card" id="casa-luz">
+          <div class="casa-cab"><svg aria-hidden="true"><use href="#i-bulb"/></svg><span>Luz</span></div>
+          <button class="casa-luz-btn" data-casa-btn="luz" aria-pressed="false">
+            <svg aria-hidden="true"><use href="#i-bulb"/></svg><span id="luz-estado">—</span>
+          </button>
+        </div>
+      </div>
+      <div id="casa-status">aguardando o Home Assistant</div>
+    </section>"""
+
+
+def home_page_html(config: Config) -> str:
+    """Page 3 exists only when `home.enabled`. Names go through json + html escaping."""
+    home = config.home
+    if not home.enabled:
+        return ""
+    dados = json.dumps(
+        {
+            "climate": home.climate,
+            "light": home.light,
+            "area": home.area,
+            "refresh_s": home.refresh_s,
+            "temp_min": home.temp_min,
+            "temp_max": home.temp_max,
+        },
+        ensure_ascii=False,
+    )
+    return HOME_PAGE.format(dados=_esc(dados), titulo=_esc(home.title))
+
+
+# Settings is `p3` (as in templates written before the home page existed) and
+# moves to `p4` only when the home page takes `p3`. The class is stable.
+SETTINGS_PAGE = """<section class="pagina pagina-ajustes" id="p{n}">
+      <div id="topo-p{n}">
+        <div id="titulo{n}">Ajustes</div>
       </div>
       <div id="config-lista">
         {acoes}
@@ -270,6 +329,20 @@ def slides_background_html(
     return page[start:] if start >= 0 else ""
 
 
+HOME_MARKER = "{{PAGINA_CASA}}"
+
+
+def home_supported(config: Config, template: Path | None = None) -> bool:
+    """True when the home page will really be in the HTML: enabled and the
+    template has the `{{PAGINA_CASA}}` marker (a template without it drops it)."""
+    if not config.home.enabled:
+        return False
+    try:
+        return HOME_MARKER in Path(template or config.view.template).read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def render(
     config: Config,
     template: Path | None = None,
@@ -307,8 +380,9 @@ def render(
         )
         if config.page2 else ""
     )
+    home_page = home_page_html(config) if HOME_MARKER in html_template else ""
     settings_page = (
-        SETTINGS_PAGE.format(acoes=settings_html(config)) if config.page3 else ""
+        SETTINGS_PAGE.format(n=4 if home_page else 3, acoes=settings_html(config)) if config.page3 else ""
     )
 
     if slides_page:
@@ -319,6 +393,8 @@ def render(
         order.insert(0, "apresentacao")
     if shortcuts_page:
         order.append("atalhos")
+    if home_page:
+        order.append("casa")
     if settings_page:
         order.append("ajustes")
     dots = "".join(
@@ -337,6 +413,7 @@ def render(
         "{{PAGINA_SLIDES}}": slides_page,
         "{{PAGINA_SLIDES_FUNDO}}": slides_bg,
         "{{PAGINA_ATALHOS}}": shortcuts_page,
+        HOME_MARKER: home_page,
         "{{PAGINA_AJUSTES}}": settings_page,
         "{{PONTOS}}": dots,
         "{{DESCANSO_ATIVO}}": "1" if config.rest.enabled else "0",

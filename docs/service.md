@@ -132,7 +132,7 @@ received anything for 150 s.
 ## Health checklist
 
 1. `python -m mcp_display_companion --check` — config parses, token is found (masked).
-2. `python -m mcp_display_companion` in the foreground — publishes, "escutando toques".
+2. `python -m mcp_display_companion` in the foreground — publishes, then logs `listening for panel touches`.
 3. Touch a button: the log shows `touch: pc_... (ev #1) -> ok`, and the button turns
    green on the panel (confirmation).
 4. Install the service, repeat 3 with the terminal closed.

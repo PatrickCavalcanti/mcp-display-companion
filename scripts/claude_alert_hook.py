@@ -160,7 +160,7 @@ def not_approvable(tool):
 
 def decision_json(answer):
     decision = {"behavior": "allow"} if answer == "allow" else {
-        "behavior": "deny", "message": "Negado pelo painel"}
+        "behavior": "deny", "message": "Denied by the panel"}
     return json.dumps({"hookSpecificOutput": {
         "hookEventName": "PermissionRequest", "decision": decision}})
 
@@ -195,7 +195,7 @@ def permission_request(data, sid, folder):
     write_json(folder, rid + ".json", {
         "session": sid,
         "project": project_of(data),
-        "message": f"Claude quer usar {tool}"[:300],
+        "message": f"Claude wants to use {tool}"[:300],
         "at": time.time(),
         "request": {"tool": tool, "summary": summary, "truncated": bool(tool_cut or summary_cut)},
         "actionable": True,

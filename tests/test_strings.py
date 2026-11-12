@@ -5,7 +5,7 @@ import pytest
 
 from mcp_display_companion import strings
 from mcp_display_companion.config import default_template
-from mcp_display_companion.strings import DEFAULT_LANGUAGE, LANGUAGES, STRINGS, t
+from mcp_display_companion.strings import DEFAULT_LANGUAGE, LANGUAGES, STRINGS, WEATHER_CONDITIONS, t, weather_condition
 
 
 def test_languages_and_default():
@@ -70,6 +70,8 @@ def _keys_used_by_the_screen():
     for pair in re.findall(r"\btx\(\w+ \? '([a-z0-9_]+)' : '([a-z0-9_]+)'", template):
         used |= set(pair)
     used |= set(re.findall(r't\(language, "([a-z0-9_]+)"', view_py))
+    runtime_py = (Path(strings.__file__).parent / 'runtime.py').read_text(encoding='utf-8')
+    used |= set(re.findall(r'(?<![\w.])t\([\w.]+, "([a-z0-9_]+)"', runtime_py))
     used |= {f'clock_day_{n}' for n in range(7)} | {f'clock_month_{n}' for n in range(12)}  # built in JS
     return used
 
@@ -83,3 +85,47 @@ def test_screen_only_uses_existing_keys():
 def test_no_unused_key():
     """A key nobody reads is a text that was dropped from the screen: remove it."""
     assert set(STRINGS['en']) <= _keys_used_by_the_screen()
+
+
+def test_weather_conditions_cover_the_same_codes_in_every_language():
+    assert set(WEATHER_CONDITIONS) == set(LANGUAGES)
+    assert set(WEATHER_CONDITIONS['en']) == set(WEATHER_CONDITIONS['pt-BR'])
+    assert WEATHER_CONDITIONS['en']
+    for language in LANGUAGES:
+        assert all(text.strip() for text in WEATHER_CONDITIONS[language].values())
+
+
+def test_weather_condition_unknown_code_falls_back():
+    assert weather_condition('en', 3) == 'Overcast'
+    assert weather_condition('pt-BR', 3) == 'Nublado'
+    assert weather_condition('en', 12345) == '-'
+    assert weather_condition('pt-BR', None) == '-'
+
+
+def _weather_icon(text):
+    """`iconeClima` of the template, run in Python: its keyword rules, in order."""
+    template = Path(default_template()).read_text(encoding='utf-8')
+    body = template[template.index('function iconeClima'):]
+    body = body[:body.index('\n}\n')]
+    rules = re.findall(r"if \(/([^/]+)/\.test\(s\)\) return '(#[\w-]+)';", body)
+    fallback = re.search(r"\n  return '(#[\w-]+)';", body).group(1)
+    assert len(rules) == 4
+    lowered = text.lower()
+    for pattern, icon in rules:
+        if re.search(pattern, lowered):
+            return icon
+    return fallback
+
+
+def test_weather_icon_is_the_same_in_every_language():
+    """The icon comes from keywords of the text: both texts of a code must pick the same one."""
+    for code, text in WEATHER_CONDITIONS['pt-BR'].items():
+        assert _weather_icon(WEATHER_CONDITIONS['en'][code]) == _weather_icon(text), code
+
+
+def test_weather_icon_table_is_pinned():
+    expected = {0: '#i-sol', 1: '#i-parcial', 2: '#i-parcial', 3: '#i-nuvem', 45: '#i-nuvem', 48: '#i-nuvem',
+                51: '#i-chuva', 53: '#i-chuva', 55: '#i-chuva', 61: '#i-chuva', 63: '#i-chuva', 65: '#i-chuva',
+                80: '#i-chuva', 81: '#i-chuva', 82: '#i-chuva', 95: '#i-chuva', 96: '#i-chuva', 99: '#i-chuva'}
+    for language in LANGUAGES:
+        assert {c: _weather_icon(x) for c, x in WEATHER_CONDITIONS[language].items()} == expected, language

@@ -14,35 +14,15 @@ from typing import Any, Callable
 
 from .config import MediaSection, WeatherSection
 from .host import Host
-
-# open-meteo returns WMO weather codes; the display shows human-readable strings in Portuguese
-CONDITIONS = {
-    0: "Céu limpo",
-    1: "Parcialmente nublado",
-    2: "Parcialmente nublado",
-    3: "Nublado",
-    45: "Nevoeiro",
-    48: "Nevoeiro",
-    51: "Chuva fraca",
-    53: "Chuva",
-    55: "Chuva",
-    61: "Chuva",
-    63: "Chuva",
-    65: "Chuva forte",
-    80: "Pancadas",
-    81: "Pancadas",
-    82: "Pancadas fortes",
-    95: "Tempestade",
-    96: "Tempestade",
-    99: "Tempestade",
-}
-
+from .strings import DEFAULT_LANGUAGE, weather_condition
 
 class Weather:
     """Current weather by coordinates (open-meteo, no API key required)."""
 
-    def __init__(self, section: WeatherSection, log: Callable[[str], None] = lambda m: None) -> None:
+    def __init__(self, section: WeatherSection, log: Callable[[str], None] = lambda m: None,
+                 language: str = DEFAULT_LANGUAGE) -> None:
         self.section = section
+        self.language = language
         self.log = log
         self._last: float | None = None
         self._value: dict[str, Any] | None = None
@@ -90,7 +70,7 @@ class Weather:
         code = int(current.get("weather_code") or 0)
         return {
             "temp": round(temperature) if isinstance(temperature, (int, float)) else None,
-            "condicao": CONDITIONS.get(code, "-"),
+            "condicao": weather_condition(self.language, code),
             "cidade": self.section.label,
         }
 

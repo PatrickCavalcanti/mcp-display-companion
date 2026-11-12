@@ -94,6 +94,7 @@ _EN = {
     "home_no_target": "no target temperature in this mode",
     # Claude Code permission banner
     "alert_asks_permission": "{project} asks for permission",
+    "alert_wants_tool": "Claude wants to use {tool}",
     "alert_dismiss": "dismiss",
     "alert_deny": "Deny",
     "alert_approve_hold": "Hold to approve",
@@ -178,6 +179,7 @@ _PT_BR = {
     "home_loading": "carregando…",
     "home_no_target": "sem temperatura alvo neste modo",
     "alert_asks_permission": "{project} pede permissão",
+    "alert_wants_tool": "Claude quer usar {tool}",
     "alert_dismiss": "dispensar",
     "alert_deny": "Negar",
     "alert_approve_hold": "Segure p/ aprovar",
@@ -191,6 +193,60 @@ _PT_BR = {
 }
 
 STRINGS: dict[str, dict[str, str]] = {"en": _EN, "pt-BR": _PT_BR}
+
+
+# WMO weather codes (open-meteo) -> condition text. Read only by Python (`Weather`),
+# so it stays out of the dictionaries that reach the screen script as `T`. Both
+# languages must cover the same codes; `iconeClima` in the template picks the icon
+# from keywords of the text, and `tests/test_strings.py` checks both texts of a code
+# give the same icon.
+WEATHER_CONDITIONS: dict[str, dict[int, str]] = {
+    "en": {
+        0: "Clear sky",
+        1: "Mostly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Fog",
+        51: "Light rain",
+        53: "Rain",
+        55: "Rain",
+        61: "Rain",
+        63: "Rain",
+        65: "Heavy rain",
+        80: "Showers",
+        81: "Showers",
+        82: "Heavy showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm",
+        99: "Thunderstorm",
+    },
+    "pt-BR": {
+        0: "Céu limpo",
+        1: "Parcialmente nublado",
+        2: "Parcialmente nublado",
+        3: "Nublado",
+        45: "Nevoeiro",
+        48: "Nevoeiro",
+        51: "Chuva fraca",
+        53: "Chuva",
+        55: "Chuva",
+        61: "Chuva",
+        63: "Chuva",
+        65: "Chuva forte",
+        80: "Pancadas",
+        81: "Pancadas",
+        82: "Pancadas fortes",
+        95: "Tempestade",
+        96: "Tempestade",
+        99: "Tempestade",
+    },
+}
+
+
+def weather_condition(language: str, code: object) -> str:
+    """Condition text of a WMO `code` in `language`; "-" for an unknown code."""
+    return WEATHER_CONDITIONS[language].get(code, "-")  # type: ignore[arg-type]
 
 
 def t(language: str, key: str, **kwargs: object) -> str:

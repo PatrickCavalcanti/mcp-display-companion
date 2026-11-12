@@ -429,7 +429,7 @@ def test_hook_permission_request_waits_for_the_answer(alerts_dir, answer, behavi
         data = json.loads(req.read_text(encoding="utf-8"))
         assert data["actionable"] is True and data["project"] == "proj-a" and data["session"] == "sess-1"
         assert data["request"] == {"tool": "Bash", "summary": "x" * 500, "truncated": False}
-        assert data["message"] == "Claude quer usar Bash" and isinstance(data["at"], float)
+        assert data["message"] == "Claude wants to use Bash" and isinstance(data["at"], float)
         req.with_suffix(".answer").write_text(answer, encoding="utf-8")
         out, _ = proc.communicate(timeout=10)
     finally:
@@ -439,7 +439,7 @@ def test_hook_permission_request_waits_for_the_answer(alerts_dir, answer, behavi
     assert decision["hookEventName"] == "PermissionRequest"
     assert decision["decision"]["behavior"] == behavior
     if behavior == "deny":
-        assert decision["decision"]["message"] == "Negado pelo painel"
+        assert decision["decision"]["message"] == "Denied by the panel"
     assert list(alerts_dir.iterdir()) == []
 
 
@@ -690,6 +690,22 @@ def respond(rt, args=None, nonce=True, **changes):
 
 def answers(rt):
     return sorted(p.name for p in rt.adir.glob("*.answer"))
+
+
+@pytest.mark.parametrize("language,text", [("en", "Claude wants to use Bash"), ("pt-BR", "Claude quer usar Bash")])
+def test_actionable_alert_message_follows_the_panel_language(rt, language, text):
+    from dataclasses import replace
+    rt.config = replace(rt.config, view=ViewSection(language=language))
+    # an old hook still writes the Portuguese text: the service rebuilds it from request.tool
+    put_request(rt, message="Claude quer usar Bash")
+    rt.tick()
+    assert rt.client_.alert_updates()[-1][0]["message"] == text
+
+
+def test_alert_without_a_tool_keeps_its_message(rt):
+    put(rt, "s1", message="Claude is waiting for your input")
+    rt.tick()
+    assert rt.client_.alert_updates()[-1][0]["message"] == "Claude is waiting for your input"
 
 
 def test_actionable_alert_reaches_the_view_with_its_request(rt):
@@ -982,7 +998,7 @@ def test_view_sends_the_nonce_and_never_claims_a_send_that_did_not_happen(templa
     assert "nonce: a.nonce" in block[send:send + 160]
     guard = block[:send]
     assert guard.rindex("if (!pronto)") > guard.index("function responderAlerta")
-    assert block.index("enviado…") > send                              # the notice comes after the send
+    assert block.index("tx('alert_sent')") > send                            # the notice comes after the send
 
 
 @pytest.mark.parametrize("template", TEMPLATES, ids=lambda p: p.name)
@@ -991,7 +1007,7 @@ def test_view_aprovar_needs_a_complete_and_seen_text(template, make_config):
     block = alert_js(template)
     assert "r.truncated !== false" in block
     assert "t2.scrollHeight <= t2.clientHeight + 2 || alertaLido" in block
-    assert "Texto longo/oculto — aprove no PC" in block
+    assert "tx('alert_long_text')" in block
     assert 'id="alerta-aviso"' in html
     css = html[html.index("#alerta-t2{"):html.index("</style>")]
     mono = css[css.index("#alerta-t2.mono"):]

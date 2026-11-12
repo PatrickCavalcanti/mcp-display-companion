@@ -35,6 +35,7 @@ from .host import Host, make_host
 from .live import LiveFeed, Media, Weather
 from .slideshow import SlideDeck
 from .state import StateStore
+from .strings import t
 
 # without SSE stream, polling needs to be fast so touch responses feel immediate
 FAST_POLL_S = 0.7
@@ -169,7 +170,7 @@ class Runtime:
         # overwritten by normal periodic brightness refresh
         self.screen_dark = False
         self.live = live or LiveFeed(
-            Weather(config.weather, log=log),
+            Weather(config.weather, log=log, language=config.view.language),
             Media(config.media, self.host, log=log),
         )
         self.slides = SlideDeck(config.slides, log=log)
@@ -265,6 +266,9 @@ class Runtime:
             # fail closed: only an explicit `false` from the hook lets the panel approve
             cut = (request.get("truncated") is not False
                    or len(summary) > ALERT_SUMMARY_MAX or len(tool) > ALERT_TOOL_MAX)
+            if tool:
+                # the hook writes the message in English; the panel language wins
+                alert["message"] = t(self.config.view.language, "alert_wants_tool", tool=tool)[:300]
             alert["actionable"] = True
             alert["request"] = {
                 "tool": tool[:ALERT_TOOL_MAX],

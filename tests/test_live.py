@@ -17,13 +17,19 @@ def weather_http(monkeypatch):
 
 
 def test_weather_refresh_window(weather_http):
-    weather = Weather(WeatherSection(enabled=True, label='City', refresh_min=2))
+    weather = Weather(WeatherSection(enabled=True, label='City', refresh_min=2), language='pt-BR')
     expected = {'temp': 27, 'condicao': 'Nublado', 'cidade': 'City'}
     assert weather.due(0) == expected
     assert weather.due(119) is None
     assert len(weather_http) == 1
     assert weather.due(120) == expected
     assert len(weather_http) == 2
+
+
+def test_weather_condition_follows_the_language(weather_http):
+    assert Weather(WeatherSection(enabled=True, label='City')).due(0)['condicao'] == 'Overcast'   # default: en
+    assert Weather(WeatherSection(enabled=True, label='City'), language='en').due(0)['condicao'] == 'Overcast'
+    assert Weather(WeatherSection(enabled=True, label='City'), language='pt-BR').due(0)['condicao'] == 'Nublado'
 
 
 def test_weather_disabled(weather_http):
@@ -60,7 +66,8 @@ def test_media_none_and_disabled(host):
 
 def test_live_feed_combines_and_omits(weather_http, host):
     host.info = {'titulo': 'Song'}
-    feed = LiveFeed(Weather(WeatherSection(enabled=True, label='City')), Media(MediaSection(enabled=True), host))
+    feed = LiveFeed(Weather(WeatherSection(enabled=True, label='City'), language='pt-BR'),
+                    Media(MediaSection(enabled=True), host))
     first = feed.due(1000)
     assert first == {'clima': {'temp': 27, 'condicao': 'Nublado', 'cidade': 'City'}, 'midia': host.info}
     # without panel acknowledgment pending data continues being offered

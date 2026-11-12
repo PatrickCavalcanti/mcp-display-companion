@@ -213,7 +213,10 @@ class Runtime:
                     f"WATCHDOG: loop has stalled for {stalled:.0f}s "
                     "(COM/winrt hang?). Exiting for supervisor restart."
                 )
-                os._exit(9)
+                try:
+                    self.runner.release_all_held_keys()
+                finally:
+                    os._exit(9)
 
     # ------------------------------------------------------------------ #
     # rest mode (display preference, saved on PC)
@@ -743,6 +746,8 @@ class Runtime:
                 delivery.update(self._rest_payload())
             if action is not None and action.type == "overlay":
                 delivery.update(self._photo_clock_payload())
+            if action is not None and action.type == "hotkey_toggle":
+                delivery["toggles"] = {action.id: self.runner.is_hotkey_active(action.id)}
             if delivery:
                 sent = self._send(
                     delivery,
@@ -781,33 +786,37 @@ class Runtime:
         self._warn_alerts_dir()
         threading.Thread(target=self._watchdog, daemon=True, name="watchdog").start()
 
-        while True:
-            # A reconnect attempt is the loop working, not a hang: with the
-            # phone offline, tick() never runs, and without this pulse the
-            # watchdog would kill the service every WATCHDOG_LIMIT_S.
-            self._pulse = time.time()
-            try:
-                self._connect()
-                self.log("listening for panel touches")
-                while True:
-                    self.tick()
-                    self._renew_stream()
-                    wait_time = SLOW_POLL_S if self.client.stream_ok.is_set() else self._poll_wait()
-                    if self._wake.wait(timeout=wait_time):
-                        self._wake.clear()
-            except SessionGone as exc:
-                self.log(f"{exc}; reconnecting")
-                self._reconnect()
-            except RateLimited as exc:
-                self.log(f"{exc}; waiting 2s")
-                time.sleep(2)
-            except PanelError as exc:
-                self.log(f"transport failed ({exc}); reconnecting in 5s")
-                time.sleep(5)
-                self._reconnect()
-            except Exception:  # noqa: BLE001 - loop must survive transient exceptions
-                self.log(f"unexpected error in loop:\n{traceback.format_exc()}")
-                self._reconnect()
+        try:
+            while True:
+                # A reconnect attempt is the loop working, not a hang: with the
+                # phone offline, tick() never runs, and without this pulse the
+                # watchdog would kill the service every WATCHDOG_LIMIT_S.
+                self._pulse = time.time()
+                try:
+                    self._connect()
+                    self.log("listening for panel touches")
+                    while True:
+                        self.tick()
+                        self._renew_stream()
+                        wait_time = SLOW_POLL_S if self.client.stream_ok.is_set() else self._poll_wait()
+                        if self._wake.wait(timeout=wait_time):
+                            self._wake.clear()
+                except SessionGone as exc:
+                    self.log(f"{exc}; reconnecting")
+                    self._reconnect()
+                except RateLimited as exc:
+                    self.log(f"{exc}; waiting 2s")
+                    time.sleep(2)
+                except PanelError as exc:
+                    self.log(f"transport failed ({exc}); reconnecting in 5s")
+                    time.sleep(5)
+                    self._reconnect()
+                except Exception:  # noqa: BLE001 - loop must survive transient exceptions
+                    self.log(f"unexpected error in loop:\n{traceback.format_exc()}")
+                    self._reconnect()
+        finally:
+            # service stopping (normal exit or exception): never leave keys held down
+            self.runner.release_all_held_keys()
 
     def _poll_wait(self) -> float:
         """Without SSE, polling uses `panel.poll_ms` (default 0.7s)."""

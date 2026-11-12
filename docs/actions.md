@@ -170,6 +170,34 @@ Like `rest`, it is a settings-page switch: with the pair configured, page 3 show
 a second row, the choice lives on the PC (`state.json`) and survives a reload of
 the screen. The `slides.clock` value is only the starting point.
 
+## `hotkey_toggle` — hold a key combination until the next tap
+
+```json
+{ "id": "pc_ditado", "label": "Dictation", "type": "hotkey_toggle",
+  "keys": ["ctrl", "win"], "icon": "mic" }
+```
+
+| Field | Values |
+|---|---|
+| `keys` | list of keys, default `["ctrl", "win"]`. Each is a name (`ctrl`, `win`, `shift`, `alt`, plus the `l`/`r` variants such as `lctrl`, `rwin`), a decimal virtual-key code (`66`) or a hex string (`"0x41"`) |
+
+The first tap presses the keys down in the order listed and **keeps them held**;
+the next tap releases them in the reverse order. It is meant for shortcuts that
+work while held, such as the Windows dictation shortcut (`ctrl` + `win`).
+
+**Windows only.** On macOS and Linux the action fails and the reason is written
+to the log.
+
+> **Warning:** while the button is on, the keys are physically held down in the
+> system — every other key you type is combined with them. Tap the button again
+> to release them. The service also releases everything it holds when it stops.
+> If the service is killed abruptly the keys may stay stuck: press and release
+> each of them on the keyboard to free them.
+
+The service tells the screen whether the keys are held after each tap, so a
+screen can show the on/off state of the button (the bundled screen does not draw
+it yet). The icons `mic` and `mic_off` are available for this kind of button.
+
 ### Reserved names
 
 The View also calls two names that are **not** actions, handled by the service

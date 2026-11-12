@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from .config import Action, Config, expand_path
+from .config import DEFAULT_HOTKEY, NAMED_KEYS, Action, Config, expand_path, parse_key
 from .host import Host
 
 
@@ -53,6 +53,8 @@ class ActionRunner:
         self.rest = rest
         # clock overlay on photos is also service state
         self.overlay = overlay
+        # hotkey_toggle state: action id -> virtual keys currently held down
+        self.held_hotkeys: dict[str, list[int]] = {}
         # relative paths in `folder`/`command.cwd` are relative to config.json,
         # not the current working directory from which service was started
         self.base_dir = config.base_dir
@@ -88,6 +90,38 @@ class ActionRunner:
     def _run_key(self, action: Action) -> ActionResult:
         vk = int(action.params["vk"])
         return ActionResult(self.host.press_key(vk), f"vk {vk:#x}")
+
+    def is_hotkey_active(self, action_id: str) -> bool:
+        return action_id in self.held_hotkeys
+
+    def release_all_held_keys(self) -> None:
+        """Lets go of every key still held (service stopping): never leave a key stuck."""
+        for keys in list(self.held_hotkeys.values()):
+            for vk in reversed(keys):
+                try:
+                    self.host.key_up(vk)
+                except Exception:  # noqa: BLE001 - keep releasing the others
+                    pass
+        self.held_hotkeys.clear()
+
+    def _run_hotkey_toggle(self, action: Action) -> ActionResult:
+        keys_raw = list(action.params.get("keys", DEFAULT_HOTKEY))
+        held = self.held_hotkeys.pop(action.id, None)
+        if held is not None:
+            ok = True
+            for vk in reversed(held):
+                ok = bool(self.host.key_up(vk)) and ok
+            return ActionResult(ok, f"released {keys_raw}")
+        vk_list = [parse_key(k) for k in keys_raw]
+        pressed: list[int] = []
+        for vk in vk_list:
+            if not self.host.key_down(vk):
+                for done in reversed(pressed):
+                    self.host.key_up(done)
+                return ActionResult(False, f"could not hold {keys_raw}")
+            pressed.append(vk)
+        self.held_hotkeys[action.id] = vk_list
+        return ActionResult(True, f"holding {keys_raw}")
 
     def _run_volume(self, action: Action) -> ActionResult:
         direction = action.params["direction"]

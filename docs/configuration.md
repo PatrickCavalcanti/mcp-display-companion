@@ -356,7 +356,7 @@ A list; each item becomes a button (and a tool name the View may call). See
 |---|---|---|
 | `id` | — (**required**) | the tool name, `[a-z0-9_]`, starting with a letter. Use a `pc_` prefix |
 | `label` | the id | text under the button |
-| `type` | — (**required**) | `media`, `key`, `volume`, `folder`, `app`, `url`, `command`, `display` |
+| `type` | — (**required**) | `media`, `key`, `volume`, `folder`, `app`, `url`, `command`, `display`, `hotkey_toggle` |
 | `page` / `pages` | `2` | `2`, `[1, 2]`, `1` (which **requires** `featured`) or `3` (settings page — `rest` actions only) |
 | `featured` | `false` | the big button on page 1 — page 1 has exactly one slot |
 | `accent` | `false` | tinted (purple) button |

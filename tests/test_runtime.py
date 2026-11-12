@@ -379,3 +379,54 @@ def test_home_refresh_failures_are_muted_for_ten_minutes(runtime, touch):
     clock[0] += 601
     rt._handle(ev(54, 'homeassistant__GetLiveContext'), now[0])
     assert refresh_logs() == 2
+
+
+# --------------------------------------------------------------------------- #
+# hotkey_toggle in the service: state in the delivery, keys released on stop
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def hotkey_runtime(make_config, host, monkeypatch):
+    from mcp_display_companion.config import Action
+
+    class UnusedLoop:
+        def run_until_complete(self, coro): raise AssertionError('Unexpected asynchronous host call')
+        def close(self): pass
+
+    monkeypatch.setattr('mcp_display_companion.runtime.asyncio.new_event_loop', UnusedLoop)
+    client = FakeClient()
+    cfg = make_config([Action('pc_mic', 'Mic', 'hotkey_toggle', params={'keys': ['ctrl', 'win']})],
+                      display=DisplaySection(enabled=False))
+    instance = Runtime(cfg, client=client, host=host, live=FakeLive(), clock=lambda: 1000.0)
+    try:
+        yield instance, client, host
+    finally:
+        instance._loop.close()
+
+
+def test_hotkey_touch_reports_the_toggle_state(hotkey_runtime, touch):
+    rt, client, host = hotkey_runtime
+    client.batches.extend([{'cursor': 41, 'eventos': []},
+                           {'cursor': 42, 'eventos': [touch(dados={'tool': 'pc_mic'})]},
+                           {'cursor': 43, 'eventos': [touch(id=43, dados={'tool': 'pc_mic'})]}])
+    rt.tick()
+    rt.tick()
+    assert any(data.get('toggles') == {'pc_mic': True} for data, _ in client.updates)
+    rt.tick()
+    assert any(data.get('toggles') == {'pc_mic': False} for data, _ in client.updates)
+
+
+def test_held_keys_are_released_when_the_loop_ends_by_exception(hotkey_runtime, monkeypatch):
+    rt, client, host = hotkey_runtime
+    monkeypatch.setattr('mcp_display_companion.runtime.threading.Thread',
+                        lambda *a, **k: type('T', (), {'start': lambda self: None})())
+    rt.runner.run('pc_mic')
+    host.calls.clear()
+
+    def connect():
+        raise _StopLoop
+
+    client.connect = connect
+    with pytest.raises(_StopLoop):
+        rt.run()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]
+    assert not rt.runner.is_hotkey_active('pc_mic')

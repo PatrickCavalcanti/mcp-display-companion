@@ -1,6 +1,6 @@
 """Executes what a touch requested -- only what is present in configuration.
 
-Panel security rule (see README.md, "Security notes"): **the event carries an
+Panel security rule (see docs/configuration.md, "Security notes"): **the event carries an
 action name, not a command.** This module only executes IDs that exist in
 `config.actions`; any other name is ignored. Text coming from a touch is never
 turned into a path, argument, or shell command line.

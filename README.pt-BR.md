@@ -34,14 +34,20 @@ Este é um painel pronto para o app [MCP Display](https://okapp.ai/app/mcp-displ
 
 ## Começando
 
-Você precisa de Python 3.11+, do app MCP Display rodando no celular e, do app, o endereço do painel (`http://<ip-do-celular>:7777/mcp`) e o token dele. O celular e o computador precisam estar na mesma rede.
+Já tem um agente de IA pareado com o app (o Claude Code, por exemplo)? Peça a ele para instalar este projeto. O app ensina o agente: ele baixa este repositório, configura e instala como serviço, com a sua aprovação. Os passos abaixo são o jeito manual.
+
+Você precisa de:
+
+- Python 3.11+ no computador.
+- O app [MCP Display](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay) num celular Android 7.0 ou mais novo. Ele é gratuito, com anúncios. O celular e o computador precisam estar na mesma rede.
+- O endereço do painel e o token, os dois no app. Na primeira abertura o app inicia o servidor MCP em `http://<ip-do-celular>:7777/mcp`. Para ver o endereço: abra o menu do painel (arraste o canto superior direito para dentro e segure até a contagem 3-2-1 terminar) e toque em **Parear agente**. Ele mostra o endereço com um QR code e um botão de copiar. O token está na mesma tela, em **Outras formas → Mostrar token para o agente**.
 
 ```bash
 git clone https://github.com/PatrickCavalcanti/mcp-display-companion.git
 cd mcp-display-companion
 
 python -m pip install -r requirements-windows.txt   # só Windows: mídia, capa, pastas
-cp config.example.json config.json                  # depois edite panel.url
+cp config.example.json config.json                  # depois edite panel.url (cmd do Windows: copy; o PowerShell aceita cp)
 
 # o token fica fora do repositório, nunca no config.json
 python -m mcp_display_companion --set-token SEU-TOKEN
@@ -83,6 +89,9 @@ Se você precisa de um navegador travado num painel, com sensores, câmera ou ge
 
 **Posso usar um celular Android velho como painel para o Claude Code?**
 Pode. O celular roda o app MCP Display, este serviço roda no seu computador, e a página de aviso do Claude Code aparece quando uma sessão espera uma permissão. Qualquer agente com suporte a MCP também pode desenhar no painel pelo app.
+
+**O app é gratuito?**
+É, com anúncios. Uma compra única remove os anúncios. Ele está no [Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay).
 
 **Funciona com o Home Assistant?**
 Funciona, para um ar-condicionado e uma luz de um cômodo. Ligue `home` e configure uma conexão com o Home Assistant no app MCP Display. As entidades precisam estar expostas ao Assist no Home Assistant. A página avisa e escurece quando o Home Assistant não responde.

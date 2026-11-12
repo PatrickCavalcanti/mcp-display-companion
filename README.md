@@ -34,14 +34,20 @@ This is a ready-made panel for the [MCP Display](https://okapp.ai/app/mcp-displa
 
 ## Quick start
 
-You need Python 3.11+, the MCP Display app running on the phone, and from the app the panel address (`http://<phone-ip>:7777/mcp`) and its token. The phone and the computer must be on the same network.
+Already have an AI agent paired with the app (Claude Code, for example)? Ask it to install this project. The app tells it how: the agent downloads this repo, configures it and installs it as a service, with your approval. The steps below are the manual way.
+
+You need:
+
+- Python 3.11+ on the computer.
+- The [MCP Display](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay) app on an Android 7.0+ phone. It is free, with ads. The phone and the computer must be on the same network.
+- The panel address and the token, both from the app. On first launch the app starts its MCP server at `http://<phone-ip>:7777/mcp`. To see the address: open the panel menu (drag the top-right corner inward and hold until the 3-2-1 count ends) and tap **Pair agent**. It shows the address with a QR code and a copy button. The token is on the same screen, under **Other methods → Show token for agent**.
 
 ```bash
 git clone https://github.com/PatrickCavalcanti/mcp-display-companion.git
 cd mcp-display-companion
 
 python -m pip install -r requirements-windows.txt   # Windows only: media, cover, folders
-cp config.example.json config.json                  # then edit panel.url
+cp config.example.json config.json                  # then edit panel.url (Windows cmd: copy; PowerShell accepts cp)
 
 # the token is saved outside the repo, never in config.json
 python -m mcp_display_companion --set-token YOUR-TOKEN
@@ -83,6 +89,9 @@ If you need a browser locked to a dashboard, with sensors, camera or fleet manag
 
 **Can I use an old Android phone as a dashboard for Claude Code?**
 Yes. The phone runs the MCP Display app, this service runs on your computer, and the Claude Code alert page shows when a session waits for a permission. Any MCP-capable agent can also draw on the panel through the app.
+
+**Is the app free?**
+Yes, with ads. A one-time purchase removes them. It is on [Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay).
 
 **Does it work with Home Assistant?**
 Yes, for one air conditioner and one light of a room. Turn on `home`, and set up a Home Assistant connection in the MCP Display app. The entities must be exposed to Assist in Home Assistant. The page says so and dims when Home Assistant is unreachable.

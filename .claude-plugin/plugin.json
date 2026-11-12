@@ -1,0 +1,12 @@
+{
+  "name": "mcp-display-alerts",
+  "version": "1.1.0",
+  "description": "Shows Claude Code permission requests on the MCP Display wall panel. Installs only the hook; the MCP Display Companion service must run separately.",
+  "author": {
+    "name": "Patrick Cavalcanti"
+  },
+  "homepage": "https://okapp.ai/app/mcp-display/",
+  "repository": "https://github.com/PatrickCavalcanti/mcp-display-companion",
+  "license": "MIT",
+  "keywords": ["mcp-display", "permissions", "notifications", "hooks", "wall-panel"]
+}

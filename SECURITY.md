@@ -41,6 +41,7 @@ an issue.
 
 - Approving from the panel is off by default: `alerts.allow_approve` is `false`.
 - When it is on, approving means holding the button for 1.5 s. Denying is one tap.
+- The Claude Code plugin (`mcp-display-alerts`) installs only the hook, which runs with your user's permissions like any command hook. Installing it does not turn on approving from the panel: `alerts.allow_approve` stays `false` until you change it.
 - The service accepts an answer only from the panel screen it published, and
   only with the secret (nonce) it sent to that screen for that alert.
 - An alert id must match `^[A-Za-z0-9_-]{1,80}$` before the service builds any

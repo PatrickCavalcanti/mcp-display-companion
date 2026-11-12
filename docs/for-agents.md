@@ -36,6 +36,11 @@ Say it in plain words:
    the user asks for approving from the panel and understands that anyone who can
    touch the panel can then approve
    ([`alerts`](configuration.md#alerts--claude-code-asking-for-permission)).
+   To register the hook, prefer the Claude Code plugin (`claude plugin marketplace
+   add PatrickCavalcanti/mcp-display-companion`, then `claude plugin install
+   mcp-display-alerts@mcp-display`) over editing `settings.json`. If the user
+   already registered the hook by hand, ask them to remove that entry first: two
+   copies show two banners.
 7. Ask the user which language the panel should use and set `view.language`
    (`en` or `pt-BR`) in `config.json`.
 

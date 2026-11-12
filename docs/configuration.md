@@ -214,7 +214,46 @@ a warning: a tap on it hides it.
 > the per-alert secret it sent to that View (kept in memory, never written to disk).
 
 The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
-Register it in `~/.claude/settings.json`.
+Register it as a Claude Code plugin (two commands) or by hand in `~/.claude/settings.json`.
+
+### Install as a Claude Code plugin
+
+This repository is also a Claude Code plugin marketplace with one plugin,
+`mcp-display-alerts`. The plugin installs **only the hook**. You still install and
+run the service as the README describes. With the service stopped or the phone
+unreachable, the hook leaves at once and Claude Code shows its normal dialog, so
+the plugin is harmless without the service.
+
+```
+claude plugin marketplace add PatrickCavalcanti/mcp-display-companion
+claude plugin install mcp-display-alerts@mcp-display
+```
+
+Restart the running Claude Code sessions (or run `/reload-plugins`) to load it.
+
+* **Update:** `claude plugin marketplace update mcp-display`, then
+  `claude plugin update mcp-display-alerts@mcp-display`. Update the service from
+  the same repository too: the hook and the service go together.
+* **Remove:** `claude plugin uninstall mcp-display-alerts@mcp-display` (and
+  `claude plugin marketplace remove mcp-display` if you no longer want the marketplace).
+* **Already registered the hook by hand? Remove that registration from
+  `settings.json` before you install the plugin.** Claude Code runs the manual
+  copy and the plugin copy as two separate handlers. Each writes its own request
+  file for the same tool call, so the panel shows two banners for it (the `+1`
+  badge). An answer on the panel is used by one of them; the other is cleared when
+  the tool call ends.
+* **Python:** the plugin command is `python3 ... || python ...`: it runs the
+  script with `python3`, and with `python` when there is no `python3`. One of them
+  must be on the `PATH` of the shell Claude Code uses for hooks (Git Bash, or
+  PowerShell 7 on Windows without Git Bash). If neither exists, the hook fails
+  without effect: the `PermissionRequest` hook has `"onFailure": "continue"`, so
+  Claude Code falls back to its normal dialog, and the other hooks are
+  asynchronous. `onFailure` needs Claude Code 2.1.295 or later.
+* **Alerts folder:** no setting needed. The hook and the service use the same
+  default folder on each system (see the `dir` row above). If you set `alerts.dir`,
+  also set `PANEL_COMPANION_ALERTS` for Claude Code.
+
+### Manual registration
 
 > **Test one terminal (CLI) session first.** The hook waits for the panel's answer
 > up to its time limit (290 s), but only while the service is alive. The service
@@ -234,12 +273,19 @@ Do **not** call the script directly (`python script.py`): if the file is missing
 Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
 "block / deny". Use this launcher instead: it exits 0 with no output when the
 script does not exist, and passes the script's own exit 0 through (use forward
-slashes in the path; `-I -S` keeps Python fast and isolated):
+slashes in the path; `-I -S` keeps Python fast and isolated). On Windows use the
+full path of `python.exe`; on macOS and Linux use `python3` (example below):
 
 * for the clear and `Notification` hooks (asynchronous):
 
 ```
 C:/Python313/python.exe -I -S -c "import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
+```
+
+  On macOS and Linux the same line reads:
+
+```
+python3 -I -S -c "import os,runpy,sys; p='/home/you/mcp-display-companion/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
 ```
 
 * for the `PermissionRequest` hook (synchronous, timeout above the hook's own 290 s

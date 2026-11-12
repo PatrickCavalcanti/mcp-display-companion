@@ -77,7 +77,7 @@ As fotos da página de apresentação são exemplos da pasta `slides/`. Ponha as
 O painel é uma base. Duas coisas feitas sobre ele:
 
 - **Página de casa.** Ligue `home` no `config.json` e o painel ganha uma página com um ar-condicionado (liga/desliga, temperatura) e uma luz. O celular fala direto com o Home Assistant, por uma conexão que você configura no app MCP Display, então os botões não passam pelo computador. Veja [`home` na configuração](docs/configuration.md#home--home-control-page-home-assistant).
-- **Aviso de permissão do Claude Code.** Um hook avisa o painel quando uma sessão espera uma permissão. Negar é um toque. Aprovar pelo painel vem **desligado** por padrão (`alerts.allow_approve`); ligado, exige segurar o botão por 1,5 s. Veja [`alerts` na configuração](docs/configuration.md#alerts--claude-code-asking-for-permission).
+- **Aviso de permissão do Claude Code.** Um hook avisa o painel quando uma sessão espera uma permissão. Negar é um toque. Aprovar pelo painel vem **desligado** por padrão (`alerts.allow_approve`); ligado, exige segurar o botão por 1,5 s. O hook se instala com dois comandos, como plugin do Claude Code: `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion` e depois `claude plugin install mcp-display-alerts@mcp-display`. Veja [`alerts` na configuração](docs/configuration.md#alerts--claude-code-asking-for-permission).
 
 ## Como se compara
 
@@ -88,7 +88,7 @@ Se você precisa de um navegador travado num painel, com sensores, câmera ou ge
 ## Perguntas frequentes
 
 **Posso usar um celular Android velho como painel para o Claude Code?**
-Pode. O celular roda o app MCP Display, este serviço roda no seu computador, e a página de aviso do Claude Code aparece quando uma sessão espera uma permissão. Qualquer agente com suporte a MCP também pode desenhar no painel pelo app.
+Pode. O celular roda o app MCP Display, este serviço roda no seu computador, e a página de aviso do Claude Code aparece quando uma sessão espera uma permissão. Qualquer agente com suporte a MCP também pode desenhar no painel pelo app. O hook se instala com `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion` e `claude plugin install mcp-display-alerts@mcp-display`.
 
 **O app é gratuito?**
 É, com anúncios. Uma compra única remove os anúncios. Ele está no [Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay).

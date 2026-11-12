@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Claude Code permission alerts on the panel: deny with a tap; approving from the panel is off by default.
 - Panel language: `view.language`, `en` (default) or `pt-BR`.
 - Portrait layout: the screen rearranges into a column when the phone is upright.
+- Claude Code plugin and one-plugin marketplace (`mcp-display-alerts`): install the permission hook with `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion` and `claude plugin install mcp-display-alerts@mcp-display`.
 
 ### Changed
 

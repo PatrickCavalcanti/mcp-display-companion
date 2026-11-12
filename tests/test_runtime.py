@@ -287,3 +287,36 @@ def test_gap_still_executes_new_events(runtime, touch):
     rt.tick()
     assert host.calls == [('press_key', (175,), {})]
     assert rt.cursor_store.load() == 43
+
+
+class _StopLoop(BaseException):
+    """Escapes Runtime.run(), whose loop swallows every Exception."""
+
+
+def test_reconnect_attempts_keep_the_watchdog_fed(runtime, monkeypatch):
+    # With the phone offline, each reconnect attempt is the loop working, not
+    # a COM/winrt hang: the watchdog must not kill the service every 120s.
+    from mcp_display_companion.client import PanelError
+    instance, client, *_ = runtime
+    clock = [5000.0]
+    monkeypatch.setattr('mcp_display_companion.runtime.time.time', lambda: clock[0])
+    monkeypatch.setattr('mcp_display_companion.runtime.time.sleep',
+                        lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr('mcp_display_companion.runtime.threading.Thread',
+                        lambda *a, **k: type('T', (), {'start': lambda self: None})())
+    instance._pulse = clock[0]
+    stalls = []
+
+    def connect():
+        client.connections += 1
+        stalls.append(clock[0] - instance._pulse)
+        if client.connections >= 40:  # ~40 failed attempts, well past 120s
+            raise _StopLoop
+        clock[0] += 8  # each attempt times out after a few seconds
+        raise PanelError('panel unreachable (timed out)')
+
+    client.connect = connect
+    with pytest.raises(_StopLoop):
+        instance.run()
+    assert clock[0] - 5000.0 > 120
+    assert max(stalls) < 120

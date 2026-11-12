@@ -461,6 +461,10 @@ class Runtime:
         threading.Thread(target=self._watchdog, daemon=True, name="watchdog").start()
 
         while True:
+            # A reconnect attempt is the loop working, not a hang: with the
+            # phone offline, tick() never runs, and without this pulse the
+            # watchdog would kill the service every WATCHDOG_LIMIT_S.
+            self._pulse = time.time()
             try:
                 self._connect()
                 self.log("listening for panel touches")

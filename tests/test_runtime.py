@@ -430,3 +430,34 @@ def test_held_keys_are_released_when_the_loop_ends_by_exception(hotkey_runtime, 
         rt.run()
     assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]
     assert not rt.runner.is_hotkey_active('pc_mic')
+
+
+def test_service_start_releases_the_configured_hotkeys(hotkey_runtime, monkeypatch):
+    rt, client, host = hotkey_runtime
+    monkeypatch.setattr('mcp_display_companion.runtime.threading.Thread',
+                        lambda *a, **k: type('T', (), {'start': lambda self: None})())
+
+    def connect():
+        # the keys were let go before the first connection attempt
+        assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]
+        raise _StopLoop
+
+    client.connect = connect
+    with pytest.raises(_StopLoop):
+        rt.run()
+
+
+def test_connect_sends_every_toggle_state_so_a_reloaded_screen_shows_them(hotkey_runtime):
+    rt, client, host = hotkey_runtime
+    rt._connect()
+    assert any(data.get('toggles') == {'pc_mic': False} for data, _ in client.updates)
+    rt.runner.run('pc_mic')
+    client.updates.clear()
+    rt._connect()
+    assert any(data.get('toggles') == {'pc_mic': True} for data, _ in client.updates)
+
+
+def test_connect_sends_no_toggles_without_toggle_actions(runtime):
+    rt, client, host, live, now = runtime
+    rt._connect()
+    assert not any('toggles' in data for data, _ in client.updates)

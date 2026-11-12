@@ -173,6 +173,11 @@ touches from hours ago.
 - **A custom `view.template` copied from an earlier version still renders**, but
   it keeps its own fixed texts and ignores `view.language`. To get the language,
   make the copy again from the current template.
+- **The permission hook needs the service's sign of life.** Since this version the
+  hook only waits for an answer while the service renews `.service-alive` in the
+  alerts folder; with an older service (no sign) it never offers the banner and
+  Claude Code shows its normal dialog. The hook and the service come from the same
+  repository: update both together.
 - **The single instance lock is per user now** (next to the token), so a second
   clone in another folder no longer starts alongside the first.
 

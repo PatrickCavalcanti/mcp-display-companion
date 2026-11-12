@@ -287,3 +287,11 @@ def test_user_labels_are_not_translated_nor_read_as_markers(make_config):
 def test_default_title_is_neutral(make_config):
     assert '<title>Panel</title>' in render(make_config())
     assert '<title>Meu</title>' in render(make_config(view=ViewSection(title='Meu')))
+
+
+def test_script_shows_the_held_state_of_toggle_buttons(make_config):
+    text = render(make_config([Action('pc_mic', 'Mic', 'hotkey_toggle', params={'keys': ['ctrl', 'win']})]))
+    assert 'if (d.toggles) aplicarToggles(d.toggles);' in text
+    assert "classList.toggle('retido', retido)" in text
+    assert "setAttribute('aria-pressed'" in text
+    assert '.btn.retido{' in text and 'var(--acc)' in text.split('.btn.retido{')[1].split('}')[0]

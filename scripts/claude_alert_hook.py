@@ -8,10 +8,14 @@ a bare `python missing.py` would exit 2, which Claude Code reads as "deny"):
 * ``PermissionRequest`` (synchronous, timeout 300 s): writes an *actionable* alert
   ``<alerts>/<session>-<h>-<rand>.json`` (``h`` = hash of the tool call) and waits for ``<same id>.answer`` (``allow`` or
   ``deny``, written by the companion when you press a button on the panel). It then
-  prints the decision JSON. The wait lasts up to 290 s (env ``PANEL_COMPANION_ALERT_WAIT``);
-  the hook does not check whether the service is alive. If the alert file disappears
-  (you answered on the PC) or the wait ends, it exits with no output. Depending on the
-  client, the PC dialog may only appear when the hook ends.
+  prints the decision JSON. The wait lasts up to 290 s (env ``PANEL_COMPANION_ALERT_WAIT``).
+  The service renews the file ``<alerts>/.service-alive`` every few seconds while it is
+  connected to the panel. Before writing the request, and on every turn of the wait,
+  the hook checks it: with no sign of life, or one older than 20 s (env
+  ``PANEL_COMPANION_ALIVE_MAX_AGE``), it removes its request and exits at once with no
+  output, so Claude Code shows its normal dialog. If the alert file disappears
+  (you answered on the PC) or the wait ends, it also exits with no output. Depending on
+  the client, the PC dialog may only appear when the hook ends.
 * ``Notification`` (matcher ``permission_prompt``): fallback. Writes the plain
   ``<alerts>/<session>.json`` unless a ``PermissionRequest`` alert is already up.
 * ``PostToolUse``, ``PostToolUseFailure``: removes ``<session>.json`` and only the
@@ -43,6 +47,10 @@ BASH_KEYS = ("command", "description", "timeout", "run_in_background")
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 POLL_S = 0.25
 DEFAULT_WAIT_S = 290.0
+# the service renews this file in the alerts folder on every loop round (at most
+# 5 s apart) while it is connected to the panel; 20 s = 4 rounds
+ALIVE_FILE = ".service-alive"
+ALIVE_MAX_AGE_S = 20.0
 
 
 def alerts_dir():
@@ -184,10 +192,32 @@ def wait_seconds():
         return DEFAULT_WAIT_S
 
 
+def alive_max_age():
+    try:
+        return max(0.0, float(os.environ.get("PANEL_COMPANION_ALIVE_MAX_AGE", ALIVE_MAX_AGE_S)))
+    except ValueError:
+        return ALIVE_MAX_AGE_S
+
+
+def service_alive(folder):
+    """True when the service renewed its sign of life recently. A time in the
+    future (clock skew) counts as alive; a missing or unreadable file does not."""
+    try:
+        with open(os.path.join(folder, ALIVE_FILE), encoding="utf-8") as file:
+            stamp = json.load(file)["at"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or stamp != stamp:
+        return False
+    return time.time() - stamp <= alive_max_age()
+
+
 def permission_request(data, sid, folder):
     raw_tool = str(data.get("tool_name") or "?")
     if not_approvable(raw_tool):
         return
+    if not service_alive(folder):
+        return  # nobody to show the banner: let Claude Code ask on the PC right away
     tool_input = data.get("tool_input")
     rid = f"{sid}-{call_hash(raw_tool, tool_input)}-{secrets.token_hex(8)}"
     tool, tool_cut = display_tool(raw_tool)
@@ -217,6 +247,10 @@ def permission_request(data, sid, folder):
         if answer:  # junk answer: ignore it and keep waiting
             remove(answer_path)
         if not os.path.exists(request_path):  # answered on the PC: stay silent
+            remove(answer_path)
+            return
+        if not service_alive(folder):  # the service or the phone went away while we waited
+            remove(request_path)
             remove(answer_path)
             return
         if time.monotonic() >= deadline:

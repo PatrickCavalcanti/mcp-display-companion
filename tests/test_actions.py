@@ -193,3 +193,43 @@ def test_hotkey_toggle_on_generic_host_fails_cleanly(make_config):
     assert r.is_hotkey_active('pc_action') is False
     assert any('key_down' in m and 'not implemented' in m for m in messages)
     r.release_all_held_keys()  # nothing held: must not raise
+
+
+def test_hotkey_states_lists_every_toggle_action(make_config, host):
+    config = make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']}),
+                          Action('pc_b', 'B', 'hotkey_toggle', params={'keys': ['shift']}),
+                          Action('pc_k', 'K', 'key', params={'vk': 1})])
+    r = ActionRunner(config, host)
+    assert r.hotkey_states() == {'pc_a': False, 'pc_b': False}
+    r.run('pc_b')
+    assert r.hotkey_states() == {'pc_a': False, 'pc_b': True}
+
+
+def test_release_configured_hotkeys_sends_key_up_for_every_toggle_action(make_config, host):
+    config = make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl', 'win']}),
+                          Action('pc_b', 'B', 'hotkey_toggle', params={'keys': ['shift']}),
+                          Action('pc_k', 'K', 'key', params={'vk': 1})])
+    ActionRunner(config, host).release_configured_hotkeys()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {}), ('key_up', (0x10,), {})]
+
+
+def test_release_configured_hotkeys_does_nothing_without_toggle_actions(make_config, host):
+    ActionRunner(make_config([Action('pc_k', 'K', 'key', params={'vk': 1})]), host).release_configured_hotkeys()
+    assert host.calls == []
+
+
+def test_release_configured_hotkeys_is_silent_on_the_generic_host(make_config):
+    from mcp_display_companion.host import Host
+    messages = []
+    r = ActionRunner(make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']})]),
+                     Host(log=messages.append))
+    r.release_configured_hotkeys()
+    assert messages == []
+
+
+def test_release_configured_hotkeys_survives_a_failing_host(make_config, host, monkeypatch):
+    def boom(vk):
+        raise RuntimeError('no keyboard')
+    monkeypatch.setattr(host, 'key_up', boom)
+    ActionRunner(make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']})]),
+                 host).release_configured_hotkeys()

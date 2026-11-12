@@ -217,12 +217,18 @@ The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
 Register it in `~/.claude/settings.json`.
 
 > **Test one terminal (CLI) session first.** The hook waits for the panel's answer
-> up to its time limit (290 s). Depending on the client, the PC dialog may only
-> appear when the hook ends. So with the service or the phone off, a permission
-> request can take up to that limit; set `PANEL_COMPANION_ALERT_WAIT` (seconds) to
-> shorten it. The hook does not check whether the service is alive. Register the
-> hook, run a command that asks for permission in a terminal session, and check
-> that the prompt shows up promptly before you keep it registered globally.
+> up to its time limit (290 s), but only while the service is alive. The service
+> renews a sign of life (`.service-alive` in the alerts folder) every few seconds
+> while it is connected to the phone. With the service stopped, or the phone
+> unreachable, the sign goes stale (older than 20 s; change it with
+> `PANEL_COMPANION_ALIVE_MAX_AGE`, in seconds) and the hook leaves at once with no
+> output, so Claude Code shows its normal dialog on the PC. The long wait only
+> happens with the service alive and nobody answering. Depending on the client, the
+> PC dialog may only appear when the hook ends. Register the hook, run a command
+> that asks for permission in a terminal session, and check that the prompt shows
+> up promptly before you keep it registered globally. The hook and the service come
+> from the same repository: update both together (an older service writes no sign
+> of life, so the new hook never offers the banner).
 
 Do **not** call the script directly (`python script.py`): if the file is missing,
 Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
@@ -265,8 +271,12 @@ How it works:
   message, at, request: {tool, summary, truncated}, actionable: true}`; `h` is a
   short hash of the tool call) and waits for the same name with `.answer`
   (`allow` or `deny`). On an answer it prints the decision JSON for Claude Code and
-  removes both files. The hook waits up to 290 s and then exits with no output;
-  it does not check whether the service is running. Depending on the client, the
+  removes both files. The hook waits up to 290 s and then exits with no output.
+  Before it writes the request, and on every turn of the wait, it checks the
+  service's sign of life (`.service-alive`, renewed on each loop round while the
+  service is connected to the phone, removed when it stops or reconnects). With no
+  sign, or one older than 20 s, it removes its request and exits at once with no
+  output, and Claude Code asks on the PC. Depending on the client, the
   PC dialog may only appear when the hook ends. If you answer on the PC, the clear
   events below delete the file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
   `mcp__ccd_*` tools are never offered for approval (the hook does nothing).
@@ -277,7 +287,7 @@ How it works:
   of one session keep their own banners. `UserPromptSubmit`, `Stop` and
   `SessionEnd` delete every file of that session.
 * The hook prints nothing except a decision, and always exits 0. Test knob: env
-  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait (use a short value to limit the delay when the service or phone is off).
+  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait; `PANEL_COMPANION_ALIVE_MAX_AGE` (seconds, default 20, at least 4 times the service's 5 s loop round) is how old the sign of life may be before the hook stops waiting. The `Notification` fallback does not wait for anything, so it is written even without a sign of life.
 
 The View sends the reserved tools `pc_alerta_dispensar` (arguments `{id}`) and
 `pc_alerta_responder` (arguments `{id, decisao: "allow"|"deny"}`). Like `pc_rest_*`

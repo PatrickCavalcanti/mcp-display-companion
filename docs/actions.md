@@ -191,12 +191,21 @@ to the log.
 > **Warning:** while the button is on, the keys are physically held down in the
 > system — every other key you type is combined with them. Tap the button again
 > to release them. The service also releases everything it holds when it stops.
-> If the service is killed abruptly the keys may stay stuck: press and release
+> If the service is killed abruptly the keys may stay stuck until the service
+> starts again (it releases them at startup, see below); or press and release
 > each of them on the keyboard to free them.
 
-The service tells the screen whether the keys are held after each tap, so a
-screen can show the on/off state of the button (the bundled screen does not draw
-it yet). The icons `mic` and `mic_off` are available for this kind of button.
+The service tells the screen whether the keys are held after each tap, and sends
+the state of every `hotkey_toggle` button again whenever it reconnects to the
+screen. The bundled screen draws a held button with the accent border and tint
+(class `retido`, `aria-pressed="true"`); it does not change the icon by itself, so
+pick the icon you want in the config. The icons `mic` and `mic_off` are available
+for this kind of button.
+
+At startup the service sends a key release for the keys of every `hotkey_toggle`
+action, which frees the keyboard after a killed service left keys held (releasing
+a key that is not down does nothing). On a host that cannot press keys (not
+Windows) this is skipped silently.
 
 ### Reserved names
 

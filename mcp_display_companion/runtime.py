@@ -67,6 +67,7 @@ ALERT_TOOL_MAX = 140
 ALERT_ORPHAN_ANSWER_S = 2.0
 ALERT_TMP_MAX_AGE_S = 60.0
 ALERT_RETRY_S = 30.0
+ALERT_ALIVE_FILE = ".service-alive"  # the hook reads it; see scripts/claude_alert_hook.py
 
 
 def setup_log(path: Path) -> Callable[[str], None]:
@@ -198,6 +199,7 @@ class Runtime:
         self._alerts_nonce: dict[str, str] = {}
         self._alerts_fail_sig: tuple | None = None  # signature the View rejected
         self._alerts_retry_at = 0.0
+        self._alive_failed = False
 
 
 
@@ -352,6 +354,33 @@ class Runtime:
                 f"{a['project'] or '?'} ({a['id'][:8]})" for a in active if (a["id"], a["at"]) in new))
             if cfg.wake:
                 self._wake_screen()
+
+    def _renew_alive(self) -> None:
+        """Tell the hook the panel is reachable: `<alerts>/.service-alive`, atomic.
+
+        Called at the end of a tick that read the panel's events, never while the
+        service reconnects, so the hook does not wait for a banner that cannot show.
+        """
+        cfg = self.config.alerts
+        if not cfg.enabled:
+            return
+        folder = Path(cfg.dir)
+        tmp = folder / f"{ALERT_ALIVE_FILE}.{os.getpid()}.tmp"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps({"at": time.time(), "pid": os.getpid()}), encoding="utf-8")
+            os.replace(tmp, folder / ALERT_ALIVE_FILE)
+        except OSError as exc:
+            if not self._alive_failed:
+                self._alive_failed = True
+                self.log(f"could not write the service sign of life: {exc}")
+            self._remove_quietly(str(tmp))
+        else:
+            self._alive_failed = False
+
+    def _clear_alive(self) -> None:
+        if self.config.alerts.enabled:
+            self._remove_quietly(str(Path(self.config.alerts.dir) / ALERT_ALIVE_FILE))
 
     def _warn_alerts_dir(self) -> None:
         cfg = self.config.alerts
@@ -529,6 +558,9 @@ class Runtime:
         # View reloaded: send persisted preferences for switches
         self._send(self._rest_payload(), allow_republish=False)
         self._send(self._photo_clock_payload(), allow_republish=False)
+        toggles = self.runner.hotkey_states()
+        if toggles:
+            self._send({"toggles": toggles}, allow_republish=False)
         self._alerts_sent = None  # the View may have reloaded: send the list again
         self._alerts_fail_sig = None
         if self.config.panel.subscribe and not self._stream_started:
@@ -663,6 +695,8 @@ class Runtime:
             self._cursor_dirty = self.cursor_store.load() != self.cursor
 
         self._read_events(now)
+        # last on purpose: reaching here means the panel answered this round
+        self._renew_alive()
 
     def _read_events(self, now: float) -> None:
         first = self.cursor is None
@@ -784,6 +818,7 @@ class Runtime:
     def run(self) -> None:
         self.log("=========== service started ===========")
         self._warn_alerts_dir()
+        self.runner.release_configured_hotkeys()  # a killed run may have left keys held
         threading.Thread(target=self._watchdog, daemon=True, name="watchdog").start()
 
         try:
@@ -817,6 +852,7 @@ class Runtime:
         finally:
             # service stopping (normal exit or exception): never leave keys held down
             self.runner.release_all_held_keys()
+            self._clear_alive()
 
     def _poll_wait(self) -> float:
         """Without SSE, polling uses `panel.poll_ms` (default 0.7s)."""
@@ -840,6 +876,7 @@ class Runtime:
         self._renew_stream()
 
     def _reconnect(self) -> None:
+        self._clear_alive()  # no panel to show a banner: the hook must not wait for one
         self.client.session_id = None
         self._stream_started = False
         self._last_subscription = 0.0

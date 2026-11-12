@@ -318,7 +318,7 @@ def test_dismiss_without_id_deletes_nothing(rt, args):
     put(rt, "s2")
     rt.tick()
     dismiss(rt, args)
-    assert sorted(p.name for p in rt.adir.iterdir()) == ["s1.json", "s2.json"]
+    assert sorted(p.name for p in rt.adir.iterdir() if p.name != ".service-alive") == ["s1.json", "s2.json"]
 
 
 def test_dismiss_of_an_unknown_id_deletes_nothing(rt):
@@ -398,8 +398,27 @@ def permission(sid="sess-1", tool="Bash", tool_input=None, cwd=r"C:\Users\me\pro
             "tool_name": tool, "tool_input": tool_input if tool_input is not None else {"command": "ls -la"}}
 
 
-def start_hook(alerts_dir, payload, wait="20"):
-    env = {**os.environ, "PANEL_COMPANION_ALERTS": str(alerts_dir), "PANEL_COMPANION_ALERT_WAIT": wait}
+def write_alive(alerts_dir, age=0.0):
+    """The service's sign of life, `age` seconds old (what the runtime keeps renewing)."""
+    alerts_dir.mkdir(parents=True, exist_ok=True)
+    (alerts_dir / ".service-alive").write_text(
+        json.dumps({"at": time.time() - age, "pid": 1}), encoding="utf-8")
+
+
+def leftovers(alerts_dir):
+    """Files in the alerts folder other than the service's sign of life."""
+    if not alerts_dir.exists():
+        return []
+    return [p for p in alerts_dir.iterdir() if p.name != ".service-alive"]
+
+
+def start_hook(alerts_dir, payload, wait="20", alive=True, alive_max="600"):
+    """Run the hook as a subprocess. By default the service looks alive for the whole
+    test (fresh sign, a 10 min limit); `alive=False` leaves the sign out."""
+    if alive:
+        write_alive(alerts_dir)
+    env = {**os.environ, "PANEL_COMPANION_ALERTS": str(alerts_dir), "PANEL_COMPANION_ALERT_WAIT": wait,
+           "PANEL_COMPANION_ALIVE_MAX_AGE": alive_max}
     proc = REAL_POPEN([sys.executable, "-I", "-S", str(HOOK)], stdin=subprocess.PIPE,
                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     proc.stdin.write(json.dumps(payload).encode("utf-8"))
@@ -441,7 +460,7 @@ def test_hook_permission_request_waits_for_the_answer(alerts_dir, answer, behavi
     assert decision["decision"]["behavior"] == behavior
     if behavior == "deny":
         assert decision["decision"]["message"] == "Denied by the panel"
-    assert list(alerts_dir.iterdir()) == []
+    assert leftovers(alerts_dir) == []
 
 
 def test_hook_permission_request_is_silent_when_the_file_disappears(alerts_dir):
@@ -453,7 +472,7 @@ def test_hook_permission_request_is_silent_when_the_file_disappears(alerts_dir):
     finally:
         proc.kill()
     assert (proc.returncode, out) == (0, b"")
-    assert list(alerts_dir.iterdir()) == []
+    assert leftovers(alerts_dir) == []
 
 
 def test_hook_permission_request_times_out_silently_and_cleans_up(alerts_dir):
@@ -463,7 +482,7 @@ def test_hook_permission_request_times_out_silently_and_cleans_up(alerts_dir):
     finally:
         proc.kill()
     assert (proc.returncode, out) == (0, b"")
-    assert list(alerts_dir.iterdir()) == []
+    assert leftovers(alerts_dir) == []
 
 
 def request_of(alerts_dir, tool, tool_input):
@@ -600,7 +619,93 @@ def test_hook_long_session_id_matches_the_clearing_prefix(alerts_dir):
         out, _ = proc.communicate(timeout=10)
     finally:
         proc.kill()
-    assert out == b"" and list(alerts_dir.iterdir()) == []
+    assert out == b"" and leftovers(alerts_dir) == []
+
+
+# --------------------------------------------------------------------------- #
+# sign of life: the hook does not wait for a service that is not there
+# --------------------------------------------------------------------------- #
+def finish(proc):
+    try:
+        out, _ = proc.communicate(timeout=10)
+    finally:
+        proc.kill()
+    return proc.returncode, out
+
+
+def test_hook_without_a_sign_of_life_leaves_at_once(alerts_dir):
+    started = time.monotonic()
+    assert finish(start_hook(alerts_dir, permission(), wait="100", alive=False)) == (0, b"")
+    assert time.monotonic() - started < 2
+    assert not alerts_dir.exists()   # it did not even write the request
+
+
+def test_hook_with_an_old_sign_of_life_leaves_at_once(alerts_dir):
+    write_alive(alerts_dir, age=60)
+    started = time.monotonic()
+    proc = start_hook(alerts_dir, permission(), wait="100", alive=False, alive_max="20")
+    assert finish(proc) == (0, b"")
+    assert time.monotonic() - started < 2
+    assert leftovers(alerts_dir) == []
+
+
+@pytest.mark.parametrize("content", ["", "{half", "[1]", '{"at": "now"}', '{"at": true}', '{"at": NaN}'])
+def test_hook_with_an_unreadable_sign_of_life_leaves_at_once(alerts_dir, content):
+    alerts_dir.mkdir()
+    (alerts_dir / ".service-alive").write_text(content, encoding="utf-8")
+    assert finish(start_hook(alerts_dir, permission(), wait="100", alive=False)) == (0, b"")
+    assert leftovers(alerts_dir) == []
+
+
+def test_hook_with_a_sign_in_the_future_still_waits(alerts_dir):
+    write_alive(alerts_dir, age=-3600)   # the service clock is ahead of ours: alive
+    proc = start_hook(alerts_dir, permission(), wait="20", alive=False, alive_max="20")
+    try:
+        assert wait_for(lambda: request_files(alerts_dir))
+        assert proc.poll() is None
+    finally:
+        proc.kill()
+        proc.communicate()
+
+
+def test_hook_leaves_and_removes_its_request_when_the_sign_of_life_ages(alerts_dir):
+    proc = start_hook(alerts_dir, permission(), wait="60", alive_max="1.5")
+    try:
+        assert wait_for(lambda: request_files(alerts_dir))   # fresh sign: the request is written
+        started = time.monotonic()
+        out, _ = proc.communicate(timeout=15)   # nobody renews it: the hook gives up by itself
+    finally:
+        proc.kill()
+    assert (proc.returncode, out) == (0, b"")
+    assert time.monotonic() - started < 10
+    assert leftovers(alerts_dir) == []
+
+
+def test_hook_keeps_waiting_while_the_sign_is_renewed(alerts_dir):
+    proc = start_hook(alerts_dir, permission(), wait="60", alive_max="1.5")
+    try:
+        assert wait_for(lambda: request_files(alerts_dir))
+        for _ in range(8):   # about 3 s, twice the limit
+            write_alive(alerts_dir)
+            time.sleep(0.4)
+        assert proc.poll() is None and request_files(alerts_dir)
+        request_files(alerts_dir)[0].with_suffix(".answer").write_text("deny", encoding="utf-8")
+        out, _ = proc.communicate(timeout=10)
+    finally:
+        proc.kill()
+    assert json.loads(out.decode("utf-8"))["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+
+def test_hook_notification_is_written_even_without_a_sign_of_life(alerts_dir):
+    assert run_hook(alerts_dir, notify())[:2] == (0, "")
+    assert (alerts_dir / "sess-1.json").exists()
+
+
+def test_the_hook_clearing_events_keep_the_sign_of_life(alerts_dir):
+    write_alive(alerts_dir)
+    run_hook(alerts_dir, {"session_id": "sess-1", "hook_event_name": "Stop"})
+    run_hook(alerts_dir, {**permission(), "hook_event_name": "PostToolUse"})
+    assert (alerts_dir / ".service-alive").exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -888,7 +993,7 @@ def test_orphan_answers_and_old_tmp_files_are_swept(rt):
     put_request(rt, sid="live-bbb222")
     os.utime(rt.adir / "live-bbb222.answer", (long_ago, long_ago))
     rt.tick()
-    assert sorted(p.name for p in rt.adir.iterdir()) == [".fresh.tmp", "live-bbb222.answer", "live-bbb222.json", "note.txt"]
+    assert sorted(p.name for p in rt.adir.iterdir()) == [".fresh.tmp", ".service-alive", "live-bbb222.answer", "live-bbb222.json", "note.txt"]
 
 
 def test_rejected_alert_update_never_republishes_and_retries_every_30s(rt):
@@ -1043,3 +1148,86 @@ def test_view_script_passes_node_check(template, make_config, tmp_path):
     proc = REAL_POPEN([node, "--check", str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     _, err = proc.communicate(timeout=60)
     assert proc.returncode == 0, err.decode()
+
+
+# --------------------------------------------------------------------------- #
+# sign of life written by the service
+# --------------------------------------------------------------------------- #
+def alive_path(rt):
+    return rt.adir / ".service-alive"
+
+
+def test_tick_renews_the_sign_of_life(rt):
+    before = time.time()
+    rt.tick()
+    data = json.loads(alive_path(rt).read_text(encoding="utf-8"))
+    assert data["pid"] == os.getpid() and before - 1 <= data["at"] <= time.time() + 1
+    assert [p.name for p in rt.adir.iterdir()] == [".service-alive"]   # no temp file left
+    time.sleep(0.02)
+    rt.tick()
+    assert json.loads(alive_path(rt).read_text(encoding="utf-8"))["at"] > data["at"]
+
+
+def test_sign_of_life_is_not_renewed_while_the_panel_is_unreachable(rt):
+    from mcp_display_companion.client import PanelError
+
+    def down(since):
+        raise PanelError("phone off")
+
+    rt.client_.read_events = down
+    with pytest.raises(PanelError):
+        rt.tick()
+    assert not alive_path(rt).exists()
+
+
+def test_sign_of_life_is_removed_on_reconnect_and_on_stop(rt, monkeypatch):
+    rt.tick()
+    assert alive_path(rt).exists()
+    monkeypatch.setattr("mcp_display_companion.runtime.time.sleep", lambda s: None)
+    rt._reconnect()
+    assert not alive_path(rt).exists()
+
+    class Stop(BaseException):
+        pass
+
+    rt.tick()
+    monkeypatch.setattr("mcp_display_companion.runtime.threading.Thread",
+                        lambda *a, **k: type("T", (), {"start": lambda self: None})())
+
+    def connect():
+        raise Stop
+
+    rt.client_.connect = connect
+    with pytest.raises(Stop):
+        rt.run()
+    assert not alive_path(rt).exists()
+
+
+def test_disabled_alerts_write_no_sign_of_life(rt):
+    rt.config = replace(rt.config, alerts=replace(rt.config.alerts, enabled=False))
+    rt.tick()
+    assert not rt.adir.exists()
+
+
+def test_sign_of_life_is_neither_an_alert_nor_an_orphan(rt):
+    rt.tick()
+    old = time.time() - 3600
+    os.utime(alive_path(rt), (old, old))
+    put(rt, "s1")
+    rt.tick()
+    assert [a["id"] for a in rt.client_.alert_updates()[-1]] == ["s1"]   # not shown as an alert
+    assert alive_path(rt).exists()                                       # not swept, and renewed
+    assert json.loads(alive_path(rt).read_text(encoding="utf-8"))["at"] > old
+
+
+def test_sign_of_life_write_failure_is_logged_once(rt, monkeypatch):
+    logs = []
+    rt.log = logs.append
+
+    def denied(*args):
+        raise OSError("denied")
+
+    monkeypatch.setattr("mcp_display_companion.runtime.os.replace", denied)
+    rt.tick()
+    rt.tick()
+    assert sum("sign of life" in m for m in logs) == 1

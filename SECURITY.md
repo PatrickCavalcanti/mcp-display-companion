@@ -46,10 +46,14 @@ an issue.
 - An alert id must match `^[A-Za-z0-9_-]{1,80}$` before the service builds any
   file name from it.
 - The hook waits for the panel's answer up to its time limit: 290 s by
-  default, changed with `PANEL_COMPANION_ALERT_WAIT`. It does not check whether
-  the service is running. At the limit it exits with no output. Depending on the
-  client, the PC dialog may only appear when the hook ends, so with the service or
-  the phone off a permission request can take up to that limit.
+  default, changed with `PANEL_COMPANION_ALERT_WAIT`. At the limit it exits with
+  no output. It waits only while the service is alive: the service renews a sign
+  of life file (`.service-alive`) in the alerts folder while it is connected to the
+  phone, and the hook leaves at once, with no output, when the sign is missing or
+  older than 20 s (`PANEL_COMPANION_ALIVE_MAX_AGE`). So with the service or the
+  phone off, Claude Code shows its normal dialog instead of waiting. The sign is
+  not a credential: whoever can write in the alerts folder can already write
+  `*.answer` files, which is the trust boundary described in the configuration.
 
 **Warning: with `allow_approve` on, anyone who can reach the panel can approve a
 request. There is no PIN and no biometric check.** Keep it off if other people

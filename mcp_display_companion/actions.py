@@ -104,6 +104,30 @@ class ActionRunner:
                     pass
         self.held_hotkeys.clear()
 
+    def hotkey_states(self) -> dict[str, bool]:
+        """Every configured `hotkey_toggle` action id -> whether its keys are held now."""
+        return {a.id: self.is_hotkey_active(a.id) for a in self.actions.values() if a.type == "hotkey_toggle"}
+
+    def release_configured_hotkeys(self) -> None:
+        """At startup: key_up for the keys of every `hotkey_toggle` action.
+
+        Recovers the keyboard after a killed service left keys held. Releasing a key
+        that is not down is harmless. The generic host cannot press keys, so there
+        is nothing to recover and it is left out (it would only log a complaint on
+        every start); any other failure is ignored.
+        """
+        if getattr(self.host, "name", "") == "generic":
+            return
+        for action in self.actions.values():
+            if action.type != "hotkey_toggle" or action.id in self.held_hotkeys:
+                continue
+            try:
+                keys = [parse_key(k) for k in action.params.get("keys", DEFAULT_HOTKEY)]
+                for vk in reversed(keys):
+                    self.host.key_up(vk)
+            except Exception:  # noqa: BLE001 - best effort, never blocks the start
+                pass
+
     def _run_hotkey_toggle(self, action: Action) -> ActionResult:
         keys_raw = list(action.params.get("keys", DEFAULT_HOTKEY))
         held = self.held_hotkeys.pop(action.id, None)

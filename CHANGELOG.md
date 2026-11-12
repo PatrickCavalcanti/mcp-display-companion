@@ -15,11 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- A `hotkey_toggle` button shows when its keys are held, and the service releases those keys at startup.
 - The panel is in English by default. Set `"language": "pt-BR"` in `view` to keep Portuguese.
 - Example config labels are in English.
 
 ### Fixed
 
+- The permission hook no longer waits up to 290 s when the service or the phone is off: it leaves at once and Claude Code shows its normal dialog. Update the service together with the hook.
 - The watchdog no longer restarts the service while the phone is unreachable.
 - Browser family detection for Windows paths on Linux.
 

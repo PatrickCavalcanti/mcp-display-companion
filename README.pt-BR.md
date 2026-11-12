@@ -56,7 +56,7 @@ python -m mcp_display_companion --check             # valida a configuração e 
 python -m mcp_display_companion                     # roda o serviço neste terminal
 ```
 
-Rodando, o celular mostra o painel: relógio, clima, o botão grande de play/pause. Toque nele e o serviço registra no log `toque: pc_midia_play_pause -> ok`.
+Rodando, o celular mostra o painel: relógio, clima, o botão grande de play/pause. Toque nele e o serviço registra no log `touch: pc_midia_play_pause (ev #1) -> ok`.
 
 Para continuar rodando depois de fechar o terminal, instale como serviço:
 

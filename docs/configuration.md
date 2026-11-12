@@ -169,18 +169,19 @@ survives a reload of the screen.
 ## `alerts` — Claude Code asking for permission
 
 When any Claude Code session on this PC stops to ask for a **permission**, the
-panel shows a big **red** banner over whatever page is visible ("`<project>` pede
-permissão", the tool, and what it wants to do), wakes the screen, and drops the
+panel shows a big **red** banner over whatever page is visible ("`<project>` asks for
+permission", the tool, and what it wants to do), wakes the screen, and drops the
 banner by itself as soon as you answer on the PC. With several sessions waiting
 the newest shows, with a `+N` badge.
 
-From the panel you can answer too (when the hook runs as `PermissionRequest`):
+From the panel you can answer too (when the hook runs as `PermissionRequest`). These
+texts are in English; with `view.language: "pt-BR"` they show in Portuguese.
 
-* **Negar**: one tap.
-* **Aprovar**: press and **hold 1.5 s** (a green fill shows the progress; release
+* **Deny**: one tap.
+* **Hold to approve**: press and **hold 1.5 s** (a green fill shows the progress; release
   early or move the finger to cancel). It only exists when you can read the whole
-  request: if the text was cut ("Texto longo/oculto — aprove no PC") or does not fit
-  the box until you scroll it to the end, only Negar and × are offered. The hold
+  request: if the text was cut ("Long or hidden text — approve on the PC") or does not fit
+  the box until you scroll it to the end (the panel says "Scroll to the end of the text to enable Approve"), only Deny and × are offered. The hold
   approves the request that was on screen when you pressed; if another one takes
   its place, the hold is cancelled.
 * **×**: hides the banner without answering (the PC dialog stays).
@@ -203,7 +204,7 @@ a warning: a tap on it hides it.
 | `max_age_s` | `1800` | older files are ignored and deleted (a hook that never saw the answer must not leave the banner up forever; minimum 10). A permission **request** is dropped after 300 s whatever this value is |
 | `wake` | `true` | on a **new** alert: leave rest mode on the View and set the brightness below |
 | `brightness` | same as `display.brightness` | `max`, `min`, `auto`, `off` or `0`..`100`, used while an alert shows (needs `display.enabled`) |
-| `allow_approve` | `false` | `true`: the panel may **approve** (hold the Aprovar button). `false`: it can only deny (the button is hidden and the service never writes `allow`) |
+| `allow_approve` | `false` | `true`: the panel may **approve** (hold the "Hold to approve" button). `false`: it can only deny (the button is hidden and the service never writes `allow`) |
 
 > **Security.** The alerts folder is a trust boundary: whoever can write
 > `*.answer` files there can approve tool calls. Keep it in a private per-user
@@ -215,11 +216,13 @@ a warning: a tap on it hides it.
 The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
 Register it in `~/.claude/settings.json`.
 
-> **Test one terminal (CLI) session first.** The Claude desktop app shows its own
-> dialog and races the hook, so either answer wins. The CLI may instead *wait* for
-> the `PermissionRequest` hook (up to its timeout) before showing the prompt. Register
-> the hook, run a command that asks for permission in a terminal session, and check
-> that the prompt still shows up promptly before you keep it registered globally.
+> **Test one terminal (CLI) session first.** The hook waits for the panel's answer
+> up to its time limit (290 s). Depending on the client, the PC dialog may only
+> appear when the hook ends. So with the service or the phone off, a permission
+> request can take up to that limit; set `PANEL_COMPANION_ALERT_WAIT` (seconds) to
+> shorten it. The hook does not check whether the service is alive. Register the
+> hook, run a command that asks for permission in a terminal session, and check
+> that the prompt shows up promptly before you keep it registered globally.
 
 Do **not** call the script directly (`python script.py`): if the file is missing,
 Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
@@ -262,9 +265,10 @@ How it works:
   message, at, request: {tool, summary, truncated}, actionable: true}`; `h` is a
   short hash of the tool call) and waits for the same name with `.answer`
   (`allow` or `deny`). On an answer it prints the decision JSON for Claude Code and
-  removes both files. The Claude desktop app also shows its own dialog; whichever
-  answers first wins. If you answer on the PC, the clear events below delete the
-  file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
+  removes both files. The hook waits up to 290 s and then exits with no output;
+  it does not check whether the service is running. Depending on the client, the
+  PC dialog may only appear when the hook ends. If you answer on the PC, the clear
+  events below delete the file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
   `mcp__ccd_*` tools are never offered for approval (the hook does nothing).
 * `Notification` writes the plain `<session>.json`, unless a request alert of that
   session already exists.
@@ -273,7 +277,7 @@ How it works:
   of one session keep their own banners. `UserPromptSubmit`, `Stop` and
   `SessionEnd` delete every file of that session.
 * The hook prints nothing except a decision, and always exits 0. Test knob: env
-  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait.
+  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait (use a short value to limit the delay when the service or phone is off).
 
 The View sends the reserved tools `pc_alerta_dispensar` (arguments `{id}`) and
 `pc_alerta_responder` (arguments `{id, decisao: "allow"|"deny"}`). Like `pc_rest_*`
@@ -328,9 +332,9 @@ turns such a call into an event for the companion, which only logs
 
 | Key | Default | Meaning |
 |---|---|---|
-| `template` | the one shipped in the package | another `painel.html`-style template |
+| `template` | the one shipped in the package | another `painel.html`-style template. A copy made before 1.1 keeps its own fixed texts and ignores `view.language`: copy the current template again to get the language |
 | `title` | `"Panel"` | name of the View on the phone (data from you, never translated) |
-| `language` | `"en"` | language of the panel's own texts: `"en"` or `"pt-BR"`. Covers the fixed texts on the screen (page titles, status line, settings, Home page, alert banner), the day and month names and the date format. The weather condition text and the permission-alert message follow the language too. Action labels come from your `actions` and are shown as you wrote them; they are not translated. Any other value is a configuration error. |
+| `language` | `"en"` | language of the panel's own texts: `"en"` or `"pt-BR"`. Covers the fixed texts on the screen (page titles, status line, settings, Home page, alert banner), the day and month names and the date format. The weather condition text follows the language too. The alert banner's fixed texts (title, buttons, notices) follow it, but the request summary and the `Notification` message come from Claude Code and the hook and show as they arrive (English). The hook is not aware of the language. Action labels come from your `actions` and are shown as you wrote them; they are not translated. Any other value is a configuration error. |
 | `show_clock` | `true` | clock card on page 1 |
 | `show_weather` | `true` | weather card on page 1 (also needs `live.weather.enabled`) |
 

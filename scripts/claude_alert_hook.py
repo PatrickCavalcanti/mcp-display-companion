@@ -8,8 +8,10 @@ a bare `python missing.py` would exit 2, which Claude Code reads as "deny"):
 * ``PermissionRequest`` (synchronous, timeout 300 s): writes an *actionable* alert
   ``<alerts>/<session>-<h>-<rand>.json`` (``h`` = hash of the tool call) and waits for ``<same id>.answer`` (``allow`` or
   ``deny``, written by the companion when you press a button on the panel). It then
-  prints the decision JSON. If the alert file disappears (you answered on the PC) or
-  the wait ends, it exits with no output and the normal dialog goes on.
+  prints the decision JSON. The wait lasts up to 290 s (env ``PANEL_COMPANION_ALERT_WAIT``);
+  the hook does not check whether the service is alive. If the alert file disappears
+  (you answered on the PC) or the wait ends, it exits with no output. Depending on the
+  client, the PC dialog may only appear when the hook ends.
 * ``Notification`` (matcher ``permission_prompt``): fallback. Writes the plain
   ``<alerts>/<session>.json`` unless a ``PermissionRequest`` alert is already up.
 * ``PostToolUse``, ``PostToolUseFailure``: removes ``<session>.json`` and only the
@@ -137,9 +139,9 @@ def summarize(tool, tool_input):
     try:
         compact = json.dumps(tool_input, ensure_ascii=False, separators=(",", ":"), default=str)
     except (TypeError, ValueError):
-        return "(entrada ilegível)", True
+        return "(unreadable input)", True
     if compact == "{}":
-        return "(sem argumentos)", False
+        return "(no arguments)", False
     return compact[:OTHER_CAP], len(compact) > OTHER_CAP
 
 

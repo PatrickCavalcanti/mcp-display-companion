@@ -479,7 +479,7 @@ def request_of(alerts_dir, tool, tool_input):
 @pytest.mark.parametrize("tool,tool_input,summary", [
     ("Edit", {"file_path": "C:/a/b.py"}, '{"file_path":"C:/a/b.py"}'),
     ("WebFetch", {"url": "https://example.com/x"}, '{"url":"https://example.com/x"}'),
-    ("Grep", {}, "(sem argumentos)"),
+    ("Grep", {}, "(no arguments)"),
 ])
 def test_hook_other_tools_show_compact_json(alerts_dir, tool, tool_input, summary):
     assert request_of(alerts_dir, tool, tool_input) == {"tool": tool, "summary": summary, "truncated": False}

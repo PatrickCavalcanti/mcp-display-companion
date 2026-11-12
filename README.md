@@ -56,7 +56,7 @@ python -m mcp_display_companion --check             # validates the config, show
 python -m mcp_display_companion                     # runs the service in this terminal
 ```
 
-When it runs, the phone shows the panel: clock, weather, the big play/pause button. Touch it and the service logs `toque: pc_midia_play_pause -> ok`.
+When it runs, the phone shows the panel: clock, weather, the big play/pause button. Touch it and the service logs `touch: pc_midia_play_pause (ev #1) -> ok`.
 
 To keep it running after you close the terminal, install it as a service:
 

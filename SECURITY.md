@@ -45,8 +45,11 @@ an issue.
   only with the secret (nonce) it sent to that screen for that alert.
 - An alert id must match `^[A-Za-z0-9_-]{1,80}$` before the service builds any
   file name from it.
-- If the service is stopped, the hook waits for its time limit: 290 s by
-  default, changed with `PANEL_COMPANION_ALERT_WAIT`. Then it exits with no output, and Claude Code shows its normal dialog.
+- The hook waits for the panel's answer up to its time limit: 290 s by
+  default, changed with `PANEL_COMPANION_ALERT_WAIT`. It does not check whether
+  the service is running. At the limit it exits with no output. Depending on the
+  client, the PC dialog may only appear when the hook ends, so with the service or
+  the phone off a permission request can take up to that limit.
 
 **Warning: with `allow_approve` on, anyone who can reach the panel can approve a
 request. There is no PIN and no biometric check.** Keep it off if other people

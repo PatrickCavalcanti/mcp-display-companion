@@ -36,6 +36,8 @@ Say it in plain words:
    the user asks for approving from the panel and understands that anyone who can
    touch the panel can then approve
    ([`alerts`](configuration.md#alerts--claude-code-asking-for-permission)).
+7. Ask the user which language the panel should use and set `view.language`
+   (`en` or `pt-BR`) in `config.json`.
 
 ## Where things are
 

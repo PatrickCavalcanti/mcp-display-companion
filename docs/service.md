@@ -133,7 +133,7 @@ received anything for 150 s.
 
 1. `python -m mcp_display_companion --check` — config parses, token is found (masked).
 2. `python -m mcp_display_companion` in the foreground — publishes, "escutando toques".
-3. Touch a button: the log shows `toque: pc_... -> ok`, and the button turns
+3. Touch a button: the log shows `touch: pc_... (ev #1) -> ok`, and the button turns
    green on the panel (confirmation).
 4. Install the service, repeat 3 with the terminal closed.
 
@@ -168,6 +168,11 @@ touches from hours ago.
   reusing the window already open. For the old behavior, set
   `"new_window": false` on the `url` action, or `"reuse_window": true` on the
   `folder` action ([actions.md](actions.md)).
+- **The panel is in English by default since 1.1.** To keep Portuguese, set
+  `"language": "pt-BR"` under `view` in `config.json`.
+- **A custom `view.template` copied from an earlier version still renders**, but
+  it keeps its own fixed texts and ignores `view.language`. To get the language,
+  make the copy again from the current template.
 - **The single instance lock is per user now** (next to the token), so a second
   clone in another folder no longer starts alongside the first.
 

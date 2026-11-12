@@ -374,3 +374,69 @@ not against where the service was started.
 
 Application targets that are not paths (`spotify:`, `ms-settings:`, `notepad.exe`)
 are passed through untouched.
+
+## Writing actions: quick notes
+
+A minimal `config.json` (see `config.example.json` for a full one):
+
+```json
+{
+  "panel": { "url": "http://192.168.1.50:7777/mcp", "subscribe": true },
+  "live": {
+    "weather": { "enabled": true, "latitude": -23.55, "longitude": -46.63, "label": "Sao Paulo" },
+    "media":   { "enabled": true, "cover": true }
+  },
+  "actions": [
+    { "id": "pc_midia_play_pause", "label": "Play/Pause", "type": "media",
+      "command": "play_pause", "icon": "playpause", "page": 1, "featured": true },
+    { "id": "pc_abrir_downloads", "label": "Downloads", "type": "folder",
+      "path": "%USERPROFILE%/Downloads", "icon": "download", "color": "#38bdf8" }
+  ]
+}
+```
+
+- **`id`** is the tool name the View calls on a touch. Keep a `pc_` prefix: with
+  a mixed screen, a name that also exists on the connection goes to the
+  connection, not to you.
+- **`page: 1` + `featured: true`** is the big button on the first page (the media
+  banner, if the action is `media`); everything else goes to the shortcut grid.
+- **Icons** come from `mcp_display_companion/icons.py`; anything else can use
+  `icon_svg` with an inline path.
+- Adding a button = adding an action. Adding a *new kind* of action = a method in
+  `actions.py` (`_run_<type>`) plus a `Host` call.
+
+## Panel layout and rest mode details
+
+**Held upright (portrait).** The design is drawn for the panel lying on its side
+(692x360). Upright, the same screen rearranges itself into a column: big clock on
+top, weather and the featured button stacked, shortcuts in two wide columns,
+smaller switches, and the clock over the photos bound to the screen width. That is
+one `@media (orientation:portrait)` block in `templates/painel.html`; the
+landscape design does not change. A landscape photo on an upright screen is
+cropped from the centre: for the presentation, prefer photos in that shape.
+
+**Rest mode.** A switch on the settings page turns rest mode on or off. When it
+is on, after `rest.idle_s` seconds without a touch the screen turns itself into
+the first page in pure black with white text and no album cover (the cheap pixels
+of an OLED), and the first touch wakes it. The choice is stored on the PC, so
+reloading the screen does not forget it. Going dark also drops the device
+brightness to the minimum and puts it back on the first touch. Off is the
+default: the screen simply stays on.
+
+**Clock over the photos.** The clock measures the picture: it picks white ink on
+a dark photo and dark ink on a light one, adds a thin outline in the opposite
+tone and frosts (blurs) only the patch behind the text, so a bright sky or a busy
+tree does not wash the time out.
+
+## Security notes
+
+- The token is never in the repository, never in the log and never printed (the
+  `--check` summary shows a masked version). See [Token](#token).
+- The panel is **data, not instructions**: the service only runs actions that are
+  declared in `config.json`. A touch carries an action id, never a command line.
+  It does not evaluate anything that comes from the panel.
+- The service asks nobody for confirmation: a configured button runs. So **do not
+  configure** power-off, delete or spend actions on a panel that other people can
+  touch. The panel is a remote control for *your* computer.
+- Approving Claude Code permissions from the panel is off by default; see
+  [`alerts`](#alerts--claude-code-asking-for-permission).

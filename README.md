@@ -1,221 +1,112 @@
-# mcp-display-companion
+**English** | [Português (Brasil)](README.pt-BR.md)
 
-A small service that runs on your computer and **executes the touches of an
-[MCP Display](https://github.com/) wall panel** — a wall panel here means an
-Android phone showing a web page (the MCP Display app exposes `show_view`,
-`update_view`, `read_events` and `set_display` over MCP at
-`http://<phone>:7777/mcp`). The buttons on that page call tools by name, and this
-service is what turns those names into real actions on the machine: play/pause,
-volume, open a folder, launch an app, run a shortcut. The panel's own guide
-(`panel://guide`) is the contract this service follows.
+# MCP Display Companion
 
-**[Leia em português →](README.pt-BR.md)**
+**Turn an old Android phone into a wall panel for your AI agent.**
 
-![Page 0: slideshow](docs/screenshots/apresentacao.png)
-![Page 1: clock, weather and now playing](docs/screenshots/painel-1.png)
-![Page 2: shortcuts](docs/screenshots/painel-2.png)
-![Page 3: settings](docs/screenshots/painel-3.png)
-![Rest mode: black and white, no cover](docs/screenshots/descanso.png)
+This is a ready-made panel for the [MCP Display](https://okapp.ai/app/mcp-display/en) app ([Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay)). It runs on your computer, puts the screen on the phone and carries out what you touch: media, volume, shortcuts, photos.
 
-The panel is **data, not instructions**: the service only runs actions that are
-declared in `config.json`. A touch carries an action id — never a command line.
+[![tests](https://github.com/PatrickCavalcanti/mcp-display-companion/actions/workflows/tests.yml/badge.svg)](https://github.com/PatrickCavalcanti/mcp-display-companion/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
-## Why this exists
+<p align="center">
+  <img src="docs/screenshots/panel-home.png" alt="The panel: clock, weather and now playing" width="640">
+</p>
+<p align="center">
+  <img src="docs/screenshots/panel-shortcuts.png" alt="Shortcuts page" width="30%">
+  <img src="docs/screenshots/panel-home-assistant.png" alt="Home Assistant page" width="30%">
+  <img src="docs/screenshots/panel-alert.png" alt="Claude Code permission alert" width="30%">
+</p>
 
-If nobody on the computer is listening, a touch on the panel becomes an event in
-a queue that nobody reads: the screen looks alive and nothing happens. An agent
-session can read those events for a while — and dies with the session, silently.
-This service is the boring part that stays up: it publishes its own screen,
-listens, acts, confirms, and says out loud (in its log and on the panel) when it
-is not there.
+## What you get
 
-It also survived its own bug report: a version launched from an agent session
-worked for a few minutes and then went quiet, because the process tree went with
-the session. See [docs/service.md](docs/service.md) — the fix is running it as a
-system service, and the reasons why are documented there.
-
-## Requirements
-
-- Python **3.11+**
-- An MCP Display panel reachable on the network (`http://<phone-ip>:7777/mcp`)
-  and its **token**
-- Windows for the full feature set. Media control, cover art and folder
-  navigation use Windows APIs (`winrt`, `pywin32`); on macOS/Linux the service
-  still runs with the generic host (open folders/URLs/apps/commands) but media
-  transport and now-playing metadata are **not** implemented there — the buttons
-  exist and report a failed action.
+| Feature | What it does |
+|---|---|
+| Clock and weather | Big clock and a weather card (open-meteo, no API key). |
+| Media and volume | Play/pause, next, previous, volume, and the current track with its cover. Windows only. |
+| PC shortcuts | Buttons that open a folder, an app, a web page, run a command or press a key. You declare them in `config.json`. |
+| Photo slideshow | A page of full-screen photos from a folder of yours, with a soft crossfade. |
+| Rest mode | After a while without a touch, the screen goes black and dim. The first touch wakes it. |
+| Upright panel | Hold the phone upright and the same screen rearranges itself into a column. |
+| Home page | Air conditioner and light of one room, through [Home Assistant](https://www.home-assistant.io/). Off by default. |
+| Claude Code alert | A red banner when a Claude Code session waits for a permission. From the panel you can deny with one tap. |
 
 ## Quick start
 
+You need Python 3.11+, the MCP Display app running on the phone, and from the app the panel address (`http://<phone-ip>:7777/mcp`) and its token. The phone and the computer must be on the same network.
+
 ```bash
-git clone <url-do-repositório> mcp-display-companion
+git clone https://github.com/PatrickCavalcanti/mcp-display-companion.git
 cd mcp-display-companion
 
-python -m pip install -r requirements-windows.txt   # Windows: media, cover, folders
-cp config.example.json config.json                  # edit url, actions, folders
+python -m pip install -r requirements-windows.txt   # Windows only: media, cover, folders
+cp config.example.json config.json                  # then edit panel.url
 
-# the token lives OUTSIDE the repo, never in config.json
-python -m mcp_display_companion --set-token SEU-TOKEN-AQUI
+# the token is saved outside the repo, never in config.json
+python -m mcp_display_companion --set-token YOUR-TOKEN
 
-python -m mcp_display_companion --check        # validates config, shows a summary
-python -m mcp_display_companion --print-view   # prints the HTML that will be published
-python -m mcp_display_companion               # runs the service (foreground)
+python -m mcp_display_companion --check             # validates the config, shows a summary
+python -m mcp_display_companion                     # runs the service in this terminal
 ```
 
-The **example photos** of the presentation page are in `<project folder>/slides`.
-Put yours there, or point `slides.folder` in `config.json` to a folder of your own
-(for example `%USERPROFILE%\Pictures\Painel`).
+When it runs, the phone shows the panel: clock, weather, the big play/pause button. Touch it and the service logs `toque: pc_midia_play_pause -> ok`.
 
-Then install it as a **system service** so it survives a closed terminal, a
-finished agent session and a crash (on Windows it is a logon-triggered task: it
-comes back at every logon):
+To keep it running after you close the terminal, install it as a service:
 
 ```powershell
-# Windows (Task Scheduler; removes the old Startup shortcut, restarts the service)
+# Windows: a Task Scheduler task that starts at logon
 powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1
 ```
 
 ```bash
-# macOS / Linux (launchd agent / systemd --user unit)
+# macOS / Linux: launchd agent / systemd --user unit
 ./scripts/install-service.sh
 ```
 
-## Configuring
+Photos on the slideshow page are examples from `slides/`. Put yours there, or point `slides.folder` in `config.json` to your own folder.
 
-`config.json` (git-ignored) is the whole product. `config.example.json` is a
-working example; `docs/configuration.md` is the reference.
+## Built on top
 
-```json
-{
-  "panel": { "url": "http://192.168.1.50:7777/mcp", "subscribe": true },
-  "live": {
-    "weather": { "enabled": true, "latitude": -23.55, "longitude": -46.63, "label": "São Paulo" },
-    "media":   { "enabled": true, "cover": true }
-  },
-  "actions": [
-    { "id": "pc_midia_play_pause", "label": "Play/Pause", "type": "media",
-      "command": "play_pause", "icon": "playpause", "page": 1, "featured": true },
-    { "id": "pc_abrir_downloads", "label": "Downloads", "type": "folder",
-      "path": "%USERPROFILE%/Downloads", "icon": "download", "color": "#38bdf8" }
-  ]
-}
-```
+The panel is a base. Two things built on it:
 
-- **`id`** is the tool name the View calls on a touch. Keep a `pc_` prefix: with
-  a mixed screen, a name that also exists on the connection goes to the
-  connection, not to you.
-- **`page: 1` + `featured: true`** is the big button on the first page (the media
-  banner, if the action is `media`); everything else goes to the shortcut grid.
-- **Icons** come from `mcp_display_companion/icons.py`; anything else can use
-  `icon_svg` with an inline path.
-- Adding a button = adding an action. Adding a *new kind* of action = a method in
-  `actions.py` (`_run_<type>`) plus a `Host` call.
+- **Home page.** Turn on `home` in `config.json` and the panel gets a page with one air conditioner (power, temperature) and one light. The phone talks to Home Assistant directly through a connection you set up in the MCP Display app, so the buttons do not go through the computer. See [`home` in the configuration](docs/configuration.md#home--home-control-page-home-assistant).
+- **Claude Code permission alert.** A hook tells the panel when a session waits for a permission. Denying is one tap. Approving from the panel is **off** by default (`alerts.allow_approve`); when you turn it on, you must hold the button for 1.5 s. See [`alerts` in the configuration](docs/configuration.md#alerts--claude-code-asking-for-permission).
 
-Action types: `media`, `key`, `volume`, `folder`, `app`, `url`, `command`,
-`display`, `rest` — each with its fields in [docs/actions.md](docs/actions.md).
+## How it compares
 
-### Presentation page
+[WallPanel](https://github.com/thanksmister/wallpanel-android) and [Fully Kiosk Browser](https://www.fully-kiosk.com/) are Android apps for showing web pages in kiosk mode. WallPanel describes itself as an "Android application for Web Based Dashboards and Home Automation Platforms", controlled over MQTT or HTTP, with sensor reporting and camera features. Fully Kiosk Browser describes itself as an Android kiosk app with kiosk mode, remote admin, a REST API and MQTT integration.
 
-Drop photos in the **`slides/`** folder that ships with the repo (or point
-`slides.folder` anywhere else) and a **page to the left of the clock** appears,
-looping through them **full screen** — the photo is the background of the whole
-panel, no card and no frame — with a soft crossfade. No image, no page. The service crops each photo to the panel ratio, compresses it and
-sends it as a `data:` URL — one image per `interval_s`, prepared in a background
-thread so the buttons never wait. Drop a new photo in the folder and it shows up
-without restarting anything.
+If you need a browser locked to a dashboard, with sensors, camera or fleet management, they do that well and this project is not a replacement. This project is for when an AI agent, through MCP, draws and updates the screen, and the touches come back to it as actions on your computer.
 
-### Held upright (portrait)
+## FAQ
 
-The design is drawn for the panel **lying on its side** (692×360). Upright, the
-same screen rearranges itself into a column: big clock on top, weather and the
-featured button stacked, shortcuts in two wide columns, smaller switches, and
-the clock over the photos bound to the screen width. That is one
-`@media (orientation:portrait)` block in `templates/painel.html`; the landscape
-design does not change. A landscape photo on an upright screen is cropped from
-the centre — for the presentation, prefer photos in that shape.
+**Can I use an old Android phone as a dashboard for Claude Code?**
+Yes. The phone runs the MCP Display app, this service runs on your computer, and the Claude Code alert page shows when a session waits for a permission. Any MCP-capable agent can also draw on the panel through the app.
 
-### Rest mode (page 3)
+**Does it work with Home Assistant?**
+Yes, for one air conditioner and one light of a room. Turn on `home`, and set up a Home Assistant connection in the MCP Display app. The entities must be exposed to Assist in Home Assistant. The page says so and dims when Home Assistant is unreachable.
 
-The panel is a wall display: a switch on the **settings page** turns rest mode on
-or off. When it is on, after `rest.idle_s` seconds without a touch the screen
-turns itself into the same first page in **pure black with white text and no
-album cover** — the cheap pixels of an OLED — and the first touch wakes it. The
-choice is stored on the PC, so reloading the screen does not forget it. Going
-dark also drops the **device brightness to the minimum** and puts it back on the
-first touch. Off is the default: the screen simply stays on.
+**Does my computer need to stay on?**
+For media, shortcuts, the slideshow and the alert, yes: the service runs on it, and the panel footer shows **PC offline** after 150 s without a signal. The Home Assistant page is the exception: the phone calls Home Assistant itself, so its buttons work with the computer off.
 
-The clock over the photos measures the picture: it picks **white ink on a dark
-photo and dark ink on a light one**, adds a thin outline in the opposite tone and
-frosts (blurs) only the patch behind the text — so a bright sky or a busy palm
-tree does not wash the time out.
+**Does it work on Linux or macOS?**
+The service runs there, and so do folders, URLs, apps and commands. Media, volume and key buttons are Windows only: on Linux and macOS they report a failed action. The now-playing banner and the cover are Windows only too. The test suite runs on Linux and Windows in CI, with the OS parts faked.
 
-## What it does with events
+**Is the panel in my language?**
+The panel's own texts are in English by default. Set `view.language` to `"pt-BR"` for Portuguese. Button labels come from your `actions` and show as you wrote them.
 
-| Event | What the service does |
-|---|---|
-| `toque` with a known action | runs it, then confirms with `update_view` so the button turns green without reloading |
-| `toque` of another connection (`destino_indisponivel`) or unknown name | logs and ignores — the button is not ours |
-| `toque` older than `loop.max_event_age_s` | ignores (opening a folder from 20 minutes ago is worse than not opening) |
-| `acordou` (screen was off and got touched) | logs only; does not touch brightness again |
-| `lacuna: true` (the panel may have dropped events) | does not replay actions; republishes live data |
+**Is it safe to approve permissions from the phone?**
+Approving is off by default, so the panel can only deny. If you turn on `alerts.allow_approve`, approving takes a 1.5 s hold, but anyone who can touch the panel can approve what Claude Code asks to run. Turn it on only for a panel that nobody else reaches.
 
-The cursor is persisted (`cursor.json`), so a restart does not repeat taps.
-First read after a cold start only takes the cursor: the panel's queue may hold
-touches from hours ago.
+## Docs
 
-## Single instance / Instância única
-
-It refuses to start a second copy (OS file lock): two companions on one panel fight over the View and the screen flickers. The lock is **per user**, next to the token saved by `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — not per folder, so a second clone in another folder is refused too. The second start logs the **pid and folder** of the running one and exits without publishing. If the panel's View is taken by someone else, the service republishes with backoff and then stops, logging `outro agente/serviço está usando o painel`, instead of resetting the screen in a loop. `PANEL_COMPANION_LOCK` overrides the lock path.
-
-## Upgrading from an earlier version
-
-- **Opening a browser and opening a folder now use a new window** — a `url`
-  action behaves like `--new-window` and a `folder` action like Win+E, instead of
-  reusing the window already open. For the old behavior, set
-  `"new_window": false` on the `url` action, or `"reuse_window": true` on the
-  `folder` action ([docs/actions.md](docs/actions.md)).
-- **The single instance lock is per user now** (next to the token), so a second
-  clone in another folder no longer starts alongside the first.
-
-After `git pull`, **re-run the installer** instead of only restarting the task:
-`powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1` (Windows)
-or `./scripts/install-service.sh` (macOS/Linux). It is idempotent and installs
-nothing — but it stops the old supervisor **and its child**. Restarting only the
-task can leave the old child alive, and that child holds the *old* per-folder
-lock, which the new version no longer looks at.
-
-## What to tell the user after installing
-
-For the agent that does the install, in plain words:
-
-1. **Where the project is.** `C:\...\mcp-display-companion` (the folder you cloned).
-2. **The photos on the panel are examples.** `slides/` inside that folder ships
-   with sample photos — landscapes that have nothing to do with the user's life.
-3. **Where to put theirs.** Copy their photos into `slides/`, or better, point
-   `slides.folder` in `config.json` to a folder of theirs (e.g.
-   `%USERPROFILE%\Pictures\Painel`) and restart the service. The page shows up
-   as soon as the folder has one image and disappears when it is empty.
-4. Restart the service after editing `config.json`; the photos folder does not
-   need a restart (it rescans every `rescan_s`).
-
-## Security notes
-
-- The token is never in the repository, never in the log and never printed (the
-  `--check` summary shows a masked version). See
-  [docs/configuration.md#token](docs/configuration.md#token).
-- The service knows exactly the actions in `config.json`. It does not evaluate
-  anything that comes from the panel, and it asks nobody for confirmation: a
-  configured button runs. So **do not configure** power-off, delete or spend
-  actions on a panel that other people can touch — the panel is a remote control
-  for *your* computer.
-
-## Language
-
-Code, comments, log messages, configuration keys and docs are in English. The
-**example screen** — the wording you see on the panel, the labels in
-`config.example.json` and the markup ids in the template — is in Portuguese; edit
-`mcp_display_companion/templates/painel.html` (and the labels) to translate it. A
-Portuguese README lives in [README.pt-BR.md](README.pt-BR.md).
+- [MCP Display](https://okapp.ai/app/mcp-display/en): the app page.
+- [Configuration reference](docs/configuration.md)
+- [Action types](docs/actions.md)
+- [Running as a service, logs, upgrading, limits](docs/service.md)
+- [Notes for AI agents that install this](docs/for-agents.md)
+- [Changelog](CHANGELOG.md) and [Contributing](CONTRIBUTING.md)
 
 ## Development
 
@@ -224,37 +115,25 @@ python -m pip install pytest
 python -m pytest -q          # no network, no Windows APIs: everything is faked
 ```
 
-Layout:
-
 ```
 mcp_display_companion/
-  __main__.py    CLI: run, --check, --print-view
+  __main__.py    CLI: run, --check, --print-view, --set-token
   config.py      JSON config + secrets, validation, path expansion
   client.py      MCP transport (JSON-RPC over HTTP, SSE subscribe, 404/429)
-  events.py      pure decision: which events become actions (tested hard)
+  events.py      pure decision: which events become actions
   actions.py     the action registry; only configured ids run
-  host.py        everything OS-specific (Windows GSMTC/Shell COM, generic fallback)
-  live.py        weather (open-meteo) and media metadata, each on its own cadence
+  host.py        everything OS-specific (Windows media and Explorer, generic fallback)
+  live.py        weather and media metadata, each on its own cadence
   runtime.py     the loop: heartbeat, watchdog, cursor, publish/update, confirm
   view.py        renders templates/painel.html from config
+  strings.py     the panel's texts, per language
   icons.py       SVG symbols
 templates/painel.html   the screen (CSS, clock, gestures, offline badge)
 service.py       supervisor: restarts the service and logs why it died
-scripts/         installers (Windows Task Scheduler, launchd, systemd --user)
+scripts/         installers and the Claude Code alert hook
 tests/           pytest
 ```
 
-## Limits
-
-- Windows-only for media metadata/cover and Explorer navigation (the generic
-  path opens folders/URLs/apps, and media falls back to media keys).
-- Polling fallback is 0.7 s; with `subscribe` the panel pushes and the touch
-  reaches the action in ~40 ms.
-- The panel limits `update_view`/`set_display` to 10 calls per 10 s; the service
-  batches live data and skips unchanged values.
-- Weather comes from open-meteo (no key); failure is silent and the card keeps
-  the last value.
-
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

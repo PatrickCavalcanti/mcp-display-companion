@@ -1,221 +1,112 @@
-# mcp-display-companion
+[English](README.md) | **Português (Brasil)**
 
-Serviço que roda no computador e **executa os toques de um painel MCP Display** —
-o painel é um celular Android mostrando uma página (o app MCP Display expõe
-`show_view`, `update_view`, `read_events` e `set_display` via MCP em
-`http://<celular>:7777/mcp`). Os botões dessa página chamam tools pelo nome, e
-este serviço é quem transforma esses nomes em ações de verdade na máquina:
-play/pause, volume, abrir pasta, abrir app, rodar um atalho. O guia do próprio
-painel (`panel://guide`) é o contrato que este serviço segue.
+# MCP Display Companion
 
-**[Read in English →](README.md)**
+**Transforme um celular Android velho num painel de parede para o seu agente de IA.**
 
-![Page 0: slideshow](docs/screenshots/apresentacao.png)
-![Page 1: clock, weather and now playing](docs/screenshots/painel-1.png)
-![Page 2: shortcuts](docs/screenshots/painel-2.png)
-![Page 3: settings](docs/screenshots/painel-3.png)
-![Rest mode: black and white, no cover](docs/screenshots/descanso.png)
+Este é um painel pronto para o app [MCP Display](https://okapp.ai/app/mcp-display/pt) ([Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay)). Ele roda no seu computador, põe a tela no celular e executa o que você toca: mídia, volume, atalhos, fotos.
 
-O painel é **dado, não instrução**: o serviço só executa o que está declarado em
-`config.json`. Um toque carrega o nome de uma ação — nunca uma linha de comando.
+[![tests](https://github.com/PatrickCavalcanti/mcp-display-companion/actions/workflows/tests.yml/badge.svg)](https://github.com/PatrickCavalcanti/mcp-display-companion/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
-## Por que isso existe
+<p align="center">
+  <img src="docs/screenshots/panel-home.png" alt="O painel: relógio, clima e a faixa tocando" width="640">
+</p>
+<p align="center">
+  <img src="docs/screenshots/panel-shortcuts.png" alt="Página de atalhos" width="30%">
+  <img src="docs/screenshots/panel-home-assistant.png" alt="Página do Home Assistant" width="30%">
+  <img src="docs/screenshots/panel-alert.png" alt="Aviso de permissão do Claude Code" width="30%">
+</p>
 
-Se ninguém no computador estiver escutando, o toque vira um evento numa fila que
-ninguém lê: a tela parece viva e nada acontece. Uma sessão de agente consegue ler
-esses eventos por um tempo — e morre junto com a sessão, em silêncio. Este
-serviço é a parte chata que fica de pé: publica a própria tela, escuta, age,
-confirma e **diz em voz alta** (no log e no painel) quando não está lá.
+## O que você ganha
 
-Ele também sobreviveu ao próprio bug: uma versão iniciada de dentro de uma sessão
-de agente funcionava alguns minutos e depois emudecia, porque o processo ia junto
-com a árvore da sessão. Ver [docs/service.md](docs/service.md).
-
-## Requisitos
-
-- Python **3.11+**
-- Um painel MCP Display acessível na rede (`http://<ip-do-celular>:7777/mcp`) e o
-  **token** dele
-- Windows para o conjunto completo: mídia, capa do álbum e navegação de pastas
-  usam APIs do Windows (`winrt`, `pywin32`). Em macOS/Linux o serviço roda com o
-  host genérico (abrir pastas/URLs/apps/comandos), mas transporte de mídia e
-  metadados da faixa **não** estão implementados lá — o botão existe e responde
-  falha.
+| Função | O que faz |
+|---|---|
+| Relógio e clima | Relógio grande e um cartão de clima (open-meteo, sem chave de API). |
+| Mídia e volume | Play/pause, próxima, anterior, volume, e a faixa atual com a capa. Só no Windows. |
+| Atalhos do PC | Botões que abrem uma pasta, um app, uma página da web, rodam um comando ou apertam uma tecla. Você os declara no `config.json`. |
+| Apresentação de fotos | Uma página de fotos em tela cheia, de uma pasta sua, com transição suave. |
+| Modo descanso | Depois de um tempo sem toque, a tela fica preta e com brilho mínimo. O primeiro toque acorda. |
+| Painel de pé | Com o celular em pé, a mesma tela se reorganiza em coluna. |
+| Página de casa | Ar-condicionado e luz de um cômodo, pelo [Home Assistant](https://www.home-assistant.io/). Desligada por padrão. |
+| Aviso do Claude Code | Um aviso vermelho quando uma sessão do Claude Code espera uma permissão. Pelo painel você pode negar com um toque. |
 
 ## Começando
 
+Você precisa de Python 3.11+, do app MCP Display rodando no celular e, do app, o endereço do painel (`http://<ip-do-celular>:7777/mcp`) e o token dele. O celular e o computador precisam estar na mesma rede.
+
 ```bash
-git clone <url-do-repositório> mcp-display-companion
+git clone https://github.com/PatrickCavalcanti/mcp-display-companion.git
 cd mcp-display-companion
 
-python -m pip install -r requirements-windows.txt   # Windows: mídia, capa, pastas
-cp config.example.json config.json                  # ajuste url, ações, pastas
+python -m pip install -r requirements-windows.txt   # só Windows: mídia, capa, pastas
+cp config.example.json config.json                  # depois edite panel.url
+
+# o token fica fora do repositório, nunca no config.json
+python -m mcp_display_companion --set-token SEU-TOKEN
+
+python -m mcp_display_companion --check             # valida a configuração e mostra um resumo
+python -m mcp_display_companion                     # roda o serviço neste terminal
 ```
 
-O token fica **fora do repositório** — um comando grava no lugar certo:
+Rodando, o celular mostra o painel: relógio, clima, o botão grande de play/pause. Toque nele e o serviço registra no log `toque: pc_midia_play_pause -> ok`.
 
-```bash
-python -m mcp_display_companion --set-token SEU-TOKEN-AQUI
-```
-
-```bash
-python -m mcp_display_companion --check        # valida a configuração e mostra um resumo
-python -m mcp_display_companion --print-view   # imprime o HTML que será publicado
-python -m mcp_display_companion                # roda o serviço (primeiro plano)
-```
-
-As **fotos de exemplo** da página de apresentação estão em `<pasta do
-projeto>/slides`. Ponha as suas ali, ou aponte `slides.folder` no `config.json`
-para uma pasta sua (por exemplo `%USERPROFILE%\Pictures\Painel`).
-
-Depois instale como **serviço do sistema**, para sobreviver a terminal fechado,
-sessão de agente encerrada e queda do processo (no Windows é uma tarefa no logon:
-volta a cada login):
+Para continuar rodando depois de fechar o terminal, instale como serviço:
 
 ```powershell
-# Windows (Tarefa Agendada; remove o atalho antigo da Inicializar e reinicia)
+# Windows: uma tarefa do Agendador de Tarefas que inicia no logon
 powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1
 ```
 
 ```bash
-# macOS / Linux (launchd / systemd --user)
+# macOS / Linux: agente launchd / unidade systemd --user
 ./scripts/install-service.sh
 ```
 
-## Configurando
+As fotos da página de apresentação são exemplos da pasta `slides/`. Ponha as suas ali, ou aponte `slides.folder` no `config.json` para uma pasta sua.
 
-`config.json` (fora do git) é o produto inteiro. `config.example.json` é um
-exemplo que funciona; a referência completa está em
-[docs/configuration.md](docs/configuration.md).
+## Construído em cima
 
-```json
-{
-  "panel": { "url": "http://192.168.1.50:7777/mcp", "subscribe": true },
-  "live": {
-    "weather": { "enabled": true, "latitude": -23.55, "longitude": -46.63, "label": "São Paulo" },
-    "media":   { "enabled": true, "cover": true }
-  },
-  "actions": [
-    { "id": "pc_midia_play_pause", "label": "Play/Pause", "type": "media",
-      "command": "play_pause", "icon": "playpause", "page": 1, "featured": true },
-    { "id": "pc_abrir_downloads", "label": "Downloads", "type": "folder",
-      "path": "%USERPROFILE%/Downloads", "icon": "download", "color": "#38bdf8" }
-  ]
-}
-```
+O painel é uma base. Duas coisas feitas sobre ele:
 
-- **`id`** é o nome da tool que a View chama no toque. Use prefixo `pc_`: numa
-  tela mista, um nome que também exista na conexão vai para a conexão.
-- **`page: 1` + `featured: true`** é o botão grande da primeira página (o banner
-  de mídia, se a ação for `media`); o resto vai para a grade de atalhos.
-- **Ícones** vêm de `mcp_display_companion/icons.py`; qualquer outro pode usar
-  `icon_svg` com um desenho inline.
-- Adicionar um botão = adicionar uma ação. Adicionar um *tipo novo* de ação = um
-  método em `actions.py` (`_run_<tipo>`) mais uma chamada no `Host`.
+- **Página de casa.** Ligue `home` no `config.json` e o painel ganha uma página com um ar-condicionado (liga/desliga, temperatura) e uma luz. O celular fala direto com o Home Assistant, por uma conexão que você configura no app MCP Display, então os botões não passam pelo computador. Veja [`home` na configuração](docs/configuration.md#home--home-control-page-home-assistant).
+- **Aviso de permissão do Claude Code.** Um hook avisa o painel quando uma sessão espera uma permissão. Negar é um toque. Aprovar pelo painel vem **desligado** por padrão (`alerts.allow_approve`); ligado, exige segurar o botão por 1,5 s. Veja [`alerts` na configuração](docs/configuration.md#alerts--claude-code-asking-for-permission).
 
-Tipos: `media`, `key`, `volume`, `folder`, `app`, `url`, `command`, `display`,
-`rest` — campos de cada um em [docs/actions.md](docs/actions.md).
+## Como se compara
 
-### Página de apresentação
+[WallPanel](https://github.com/thanksmister/wallpanel-android) e [Fully Kiosk Browser](https://www.fully-kiosk.com/) são apps Android para mostrar páginas da web em modo quiosque. O WallPanel se descreve como um "Android application for Web Based Dashboards and Home Automation Platforms" (aplicativo Android para painéis web e plataformas de automação residencial), controlado por MQTT ou HTTP, com leitura de sensores e recursos de câmera. O Fully Kiosk Browser se descreve como um app Android de quiosque, com modo quiosque, administração remota, API REST e integração MQTT.
 
-Jogue fotos na pasta **`slides/`** que vem no repositório (ou aponte
-`slides.folder` para outra) e aparece uma **página à esquerda do relógio** em
-loop, com a foto **em tela cheia** — ela é o fundo do painel inteiro, sem card e
-sem moldura — e um crossfade suave. Sem imagem, sem página. O serviço recorta cada foto no formato do painel, comprime
-e manda como `data:` URL — uma imagem por `interval_s`, preparada numa thread
-para os botões nunca esperarem. Jogar foto nova na pasta aparece sem reiniciar
-nada.
+Se você precisa de um navegador travado num painel, com sensores, câmera ou gestão de vários aparelhos, eles fazem isso bem e este projeto não os substitui. Este projeto é para quando um agente de IA, via MCP, desenha e atualiza a tela, e os toques voltam para ele como ações no seu computador.
 
-### A tela de pé (retrato)
+## Perguntas frequentes
 
-O desenho é feito para o painel **deitado** (692×360). De pé, a mesma tela se
-reorganiza em coluna: relógio grande em cima, clima e botão em destaque
-empilhados, atalhos em duas colunas largas, interruptores menores e a hora sobre
-as fotos presa à largura da tela. É um bloco `@media (orientation:portrait)` em
-`templates/painel.html`; o desenho deitado não muda. Foto deitada em tela de pé
-é recortada no centro — para a apresentação, prefira fotos nesse formato.
+**Posso usar um celular Android velho como painel para o Claude Code?**
+Pode. O celular roda o app MCP Display, este serviço roda no seu computador, e a página de aviso do Claude Code aparece quando uma sessão espera uma permissão. Qualquer agente com suporte a MCP também pode desenhar no painel pelo app.
 
-### Modo descanso (página 3)
+**Funciona com o Home Assistant?**
+Funciona, para um ar-condicionado e uma luz de um cômodo. Ligue `home` e configure uma conexão com o Home Assistant no app MCP Display. As entidades precisam estar expostas ao Assist no Home Assistant. A página avisa e escurece quando o Home Assistant não responde.
 
-O painel fica na parede: um interruptor na **página de ajustes** liga e desliga o
-modo descanso. Ligado, depois de `rest.idle_s` segundos sem toque a tela vira a
-mesma página inicial em **preto puro, texto branco e sem a capa do álbum** — os
-pixels baratos de um OLED — e o primeiro toque acorda. A escolha fica guardada no
-PC, então recarregar a tela não esquece. Escurecer também leva o **brilho do
-aparelho ao mínimo** e o devolve no primeiro toque.
+**Meu computador precisa ficar ligado?**
+Para mídia, atalhos, apresentação e aviso, sim: o serviço roda nele, e o rodapé do painel mostra **PC offline** depois de 150 s sem sinal. A página do Home Assistant é a exceção: o celular chama o Home Assistant sozinho, então os botões dela funcionam com o computador desligado.
 
-O relógio sobre as fotos mede a imagem: escolhe **tinta branca em foto escura e
-escura em foto clara**, ganha um contorno fino na cor oposta e desfoca só o
-pedaço atrás do texto — céu claro ou palmeira não apagam mais a hora. Desligado é o padrão: a tela
-fica sempre acesa.
+**Funciona no Linux ou no macOS?**
+O serviço roda lá, e também pastas, URLs, apps e comandos. Os botões de mídia, volume e tecla são só do Windows: no Linux e no macOS eles respondem falha. A faixa tocando e a capa também são só do Windows. A suíte de testes roda no Linux e no Windows no CI, com as partes do sistema simuladas.
 
-## O que ele faz com cada evento
+**O painel fica no meu idioma?**
+Os textos do próprio painel vêm em inglês por padrão. Ponha `view.language` em `"pt-BR"` para português. Os rótulos dos botões vêm das suas `actions` e aparecem como você escreveu.
 
-| Evento | Ação do serviço |
-|---|---|
-| `toque` de ação conhecida | executa e confirma com `update_view` (o botão fica verde sem recarregar) |
-| `toque` de outra conexão (`destino_indisponivel`) ou nome desconhecido | registra e ignora — o botão não é nosso |
-| `toque` mais velho que `loop.max_event_age_s` | ignora (abrir uma pasta de 20 minutos atrás é pior que não abrir) |
-| `acordou` (a tela apagada foi tocada) | só registra; não mexe no brilho de novo |
-| `lacuna: true` (o painel pode ter perdido evento) | não repete ação; republica os dados vivos |
+**É seguro aprovar permissões pelo celular?**
+Aprovar vem desligado, então o painel só consegue negar. Se você ligar `alerts.allow_approve`, aprovar exige segurar por 1,5 s, mas qualquer pessoa que alcance o painel pode aprovar o que o Claude Code pede para rodar. Ligue só para um painel que mais ninguém alcança.
 
-O cursor fica em disco (`cursor.json`), então reiniciar não repete toques. A
-primeira leitura depois de subir só guarda o cursor: a fila do painel pode ter
-toques de horas atrás.
+## Documentação
 
-## Single instance / Instância única
-
-Ele se recusa a subir uma segunda cópia (trava de arquivo do sistema): dois companheiros no mesmo painel brigam pela View e a tela pisca. A trava é **por usuário**, na mesma pasta do token gravado pelo `--set-token` (`%APPDATA%\mcp-display-companion\companion.lock`) — não é por pasta, então um clone novo em outra pasta também é recusado. O segundo serviço registra no log o **pid e a pasta** do que já está rodando e sai sem publicar. Se outro agente/serviço toma a View, o serviço republica com recuo e depois para, registrando `outro agente/serviço está usando o painel`, em vez de resetar a tela em laço. `PANEL_COMPANION_LOCK` sobrescreve o caminho da trava.
-
-## Atualizando de uma versão anterior
-
-- **Abrir navegador e abrir pasta agora usam janela nova** — uma ação `url` se
-  comporta como `--new-window` e uma ação `folder` como Win+E, em vez de reusar
-  a janela já aberta. Para o comportamento antigo, use `"new_window": false` na
-  ação `url` ou `"reuse_window": true` na ação `folder`
-  ([docs/actions.md](docs/actions.md)).
-- **A trava de instância única agora é por usuário** (ao lado do token), então
-  um segundo clone em outra pasta não sobe mais junto com o primeiro.
-
-Depois do `git pull`, **rode o instalador de novo** em vez de só reiniciar a
-tarefa: `powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1`
-(Windows) ou `./scripts/install-service.sh` (macOS/Linux). Ele é idempotente e
-não instala nada — mas para o supervisor antigo **e o filho dele**. Reiniciar só
-a tarefa pode deixar o filho antigo vivo, e esse filho segura a trava *antiga*,
-por pasta, que a versão nova não consulta mais.
-
-## O que dizer ao usuário depois de instalar
-
-Para o agente que faz a instalação, em palavras simples:
-
-1. **Onde o projeto ficou.** `C:\...\mcp-display-companion` (a pasta que você clonou).
-2. **As fotos que aparecem no painel são exemplos.** A pasta `slides/` dentro
-   do projeto vem com fotos de exemplo — paisagens que não têm nada a ver com a
-   vida do usuário.
-3. **Onde pôr as dele.** Copiar as fotos dele para `slides/`, ou melhor, apontar
-   `slides.folder` no `config.json` para uma pasta dele (ex.:
-   `%USERPROFILE%\Pictures\Painel`) e reiniciar o serviço. A página aparece
-   assim que a pasta tem uma imagem e some quando ela fica vazia.
-4. Reinicie o serviço depois de editar o `config.json`; a pasta de fotos não
-   precisa de reinício (ela é revarrida a cada `rescan_s`).
-
-## Segurança
-
-- O token nunca está no repositório, nunca vai para o log e nunca é impresso
-  (o `--check` mostra uma versão mascarada). Ver
-  [docs/configuration.md#token](docs/configuration.md#token).
-- O serviço conhece exatamente as ações de `config.json`. Nada que vem do painel
-  é avaliado.
-- O serviço não pede confirmação para nada: botão configurado executa. Então
-  **não configure** desligar, apagar ou gastar numa tela que outras pessoas
-  alcançam — o painel é um controle remoto do **seu** computador.
-
-## Idioma
-
-Código, comentários, mensagens de log, chaves de configuração e documentação estão
-em inglês. A **tela de exemplo** — o texto que aparece no painel, os rótulos do
-`config.example.json` e os ids do template — está em português; edite
-`mcp_display_companion/templates/painel.html` (e os rótulos) para traduzir.
+- [MCP Display](https://okapp.ai/app/mcp-display/pt): a página do app.
+- [Referência de configuração](docs/configuration.md) (em inglês)
+- [Tipos de ação](docs/actions.md) (em inglês)
+- [Rodando como serviço, logs, atualização, limites](docs/service.md) (em inglês)
+- [Notas para agentes de IA que instalam isto](docs/for-agents.md) (em inglês)
+- [Changelog](CHANGELOG.md) e [Como contribuir](CONTRIBUTING.md)
 
 ## Desenvolvimento
 
@@ -224,37 +115,25 @@ python -m pip install pytest
 python -m pytest -q          # sem rede, sem APIs do Windows: tudo com fakes
 ```
 
-Estrutura:
-
 ```
 mcp_display_companion/
-  __main__.py    CLI: rodar, --check, --print-view
+  __main__.py    CLI: rodar, --check, --print-view, --set-token
   config.py      configuração JSON + segredos, validação, expansão de caminho
   client.py      transporte MCP (JSON-RPC sobre HTTP, SSE subscribe, 404/429)
-  events.py      decisão pura: qual evento vira ação (bem testado)
+  events.py      decisão pura: qual evento vira ação
   actions.py     registro de ações; só os ids configurados rodam
-  host.py        tudo que é do sistema (GSMTC/Shell COM no Windows, genérico)
-  live.py        clima (open-meteo) e metadados de mídia, cada um no seu ritmo
+  host.py        tudo que é do sistema (mídia e Explorer no Windows, genérico)
+  live.py        clima e metadados de mídia, cada um no seu ritmo
   runtime.py     o laço: heartbeat, watchdog, cursor, publicar/atualizar, confirmar
   view.py        monta templates/painel.html a partir da configuração
+  strings.py     os textos do painel, por idioma
   icons.py       símbolos SVG
 templates/painel.html   a tela (CSS, relógio, gestos, aviso de PC offline)
 service.py       supervisor: reinicia o serviço e registra por que ele caiu
-scripts/         instaladores (Tarefa Agendada, launchd, systemd --user)
+scripts/         instaladores e o hook de aviso do Claude Code
 tests/           pytest
 ```
 
-## Limites
-
-- Mídia (faixa/capa) e navegação de pastas são do Windows; nos outros sistemas o
-  caminho genérico abre pastas/URLs/apps e a mídia cai nas teclas.
-- O polling de reserva é 0,7 s; com `subscribe` o painel empurra o evento e o
-  toque chega à ação em ~40 ms.
-- O painel limita `update_view`/`set_display` a 10 chamadas por 10 s; o serviço
-  agrupa os dados vivos e pula o que não mudou.
-- O clima vem do open-meteo (sem chave); falha é silenciosa e o cartão mantém o
-  último valor.
-
 ## Licença
 
-MIT — ver [LICENSE](LICENSE).
+MIT. Veja [LICENSE](LICENSE).

@@ -11,7 +11,7 @@ Este é um painel pronto para o app [MCP Display](https://okapp.ai/app/mcp-displ
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 <p align="center">
-  <img src="docs/screenshots/panel-home.png" alt="O painel: relógio, clima e a faixa tocando" width="640">
+  <img src="docs/media/demo.gif" alt="O painel em uso: início, atalhos, página de casa e um aviso de permissão do Claude Code" width="640">
 </p>
 <p align="center">
   <img src="docs/screenshots/panel-shortcuts.png" alt="Página de atalhos" width="30%">

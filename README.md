@@ -11,7 +11,7 @@ This is a ready-made panel for the [MCP Display](https://okapp.ai/app/mcp-displa
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 <p align="center">
-  <img src="docs/screenshots/panel-home.png" alt="The panel: clock, weather and now playing" width="640">
+  <img src="docs/media/demo.gif" alt="The panel in use: home, shortcuts, Home Assistant page and a Claude Code permission alert" width="640">
 </p>
 <p align="center">
   <img src="docs/screenshots/panel-shortcuts.png" alt="Shortcuts page" width="30%">

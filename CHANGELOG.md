@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-11-12
 
 ### Added
 
@@ -12,11 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Claude Code permission alerts on the panel: deny with a tap; approving from the panel is off by default.
 - Panel language: `view.language`, `en` (default) or `pt-BR`.
 - Portrait layout: the screen rearranges into a column when the phone is upright.
+- `hotkey_toggle` action: a button that holds a key combination until the next tap (Windows). It shows when the keys are held, and the service releases them at startup.
 - Claude Code plugin and one-plugin marketplace (`mcp-display-alerts`): install the permission hook with `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion` and `claude plugin install mcp-display-alerts@mcp-display`.
 
 ### Changed
 
-- A `hotkey_toggle` button shows when its keys are held, and the service releases those keys at startup.
 - The panel is in English by default. Set `"language": "pt-BR"` in `view` to keep Portuguese.
 - Example config labels are in English.
 

@@ -4,6 +4,15 @@ A companion that dies when a session closes is a demo, not a service. The panel
 has no way to tell you the PC stopped listening — the screen keeps its clock and
 the weather card — so this has to be right.
 
+## Why this exists
+
+If nobody on the computer is listening, a touch on the panel becomes an event in
+a queue that nobody reads: the screen looks alive and nothing happens. An agent
+session can read those events for a while, and dies with the session, silently.
+This service is the boring part that stays up: it publishes its own screen,
+listens, acts, confirms, and says out loud (in its log and on the panel) when it
+is not there.
+
 ## The failure this file exists for
 
 First version, 2026-10-25: the service was started from an agent session
@@ -123,8 +132,8 @@ received anything for 150 s.
 ## Health checklist
 
 1. `python -m mcp_display_companion --check` — config parses, token is found (masked).
-2. `python -m mcp_display_companion` in the foreground — publishes, "escutando toques".
-3. Touch a button: the log shows `toque: pc_... -> ok`, and the button turns
+2. `python -m mcp_display_companion` in the foreground — publishes, then logs `listening for panel touches`.
+3. Touch a button: the log shows `touch: pc_... (ev #1) -> ok`, and the button turns
    green on the panel (confirmation).
 4. Install the service, repeat 3 with the terminal closed.
 
@@ -137,3 +146,52 @@ received anything for 150 s.
 | touches do nothing, footer says **PC offline** | the service is not running | `Get-ScheduledTask` / `systemctl --user status`; check `service.log` |
 | touches work, nothing happens on the PC | action id not in `config.json` (logged as "toque de outra tela ignorado") | add the action, restart |
 | button stays yellow, "sem resposta do PC" | the service is up but slow / rate-limited (429) | check the log; the panel accepts 10 calls per 10 s |
+
+## What the service does with events
+
+| Event | What the service does |
+|---|---|
+| `toque` with a known action | runs it, then confirms with `update_view` so the button turns green without reloading |
+| `toque` of another connection (`destino_indisponivel`) or unknown name | logs and ignores: the button is not ours |
+| `toque` older than `loop.max_event_age_s` | ignores (opening a folder from 20 minutes ago is worse than not opening) |
+| `acordou` (screen was off and got touched) | logs only; does not touch brightness again |
+| `lacuna: true` (the panel may have dropped events) | does not replay actions; republishes live data |
+
+The cursor is persisted (`cursor.json`), so a restart does not repeat taps.
+First read after a cold start only takes the cursor: the panel's queue may hold
+touches from hours ago.
+
+## Upgrading from an earlier version
+
+- **Opening a browser and opening a folder now use a new window.** A `url`
+  action behaves like `--new-window` and a `folder` action like Win+E, instead of
+  reusing the window already open. For the old behavior, set
+  `"new_window": false` on the `url` action, or `"reuse_window": true` on the
+  `folder` action ([actions.md](actions.md)).
+- **The panel is in English by default since 1.1.** To keep Portuguese, set
+  `"language": "pt-BR"` under `view` in `config.json`.
+- **A custom `view.template` copied from an earlier version still renders**, but
+  it keeps its own fixed texts and ignores `view.language`. To get the language,
+  make the copy again from the current template.
+- **The single instance lock is per user now** (next to the token), so a second
+  clone in another folder no longer starts alongside the first.
+
+After `git pull`, **re-run the installer** instead of only restarting the task:
+`powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1` (Windows)
+or `./scripts/install-service.sh` (macOS/Linux). It is idempotent and installs
+nothing, but it stops the old supervisor **and its child**. Restarting only the
+task can leave the old child alive, and that child holds the *old* per-folder
+lock, which the new version no longer looks at.
+
+## Limits
+
+- Windows-only for media metadata/cover, media and volume buttons, and Explorer
+  navigation. On macOS and Linux the generic host opens folders, URLs, apps and
+  commands; `press_key`, media and volume are not implemented there and the
+  buttons report a failed action.
+- Polling fallback is 0.7 s; with `subscribe` the panel pushes and the touch
+  reaches the action in ~40 ms.
+- The panel limits `update_view`/`set_display` to 10 calls per 10 s; the service
+  batches live data and skips unchanged values.
+- Weather comes from open-meteo (no key); failure is silent and the card keeps
+  the last value.

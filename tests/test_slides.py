@@ -271,8 +271,9 @@ def test_page_counts_with_all_pages(make_config, tmp_path):
     )
     html = view.render(cfg)
     assert html.count('data-p="') == 4
-    # track order: slideshow, clock, shortcuts, settings
-    order = [html.index(f'id="p{i}"') for i in range(4)]
+    # track order: slideshow, clock, shortcuts, settings (settings is p3 when there is no home page)
+    order = [html.index(f'id="p{i}"') for i in (0, 1, 2, 3)]
+    assert 'class="pagina pagina-casa"' not in html
     assert order == sorted(order)
 
 

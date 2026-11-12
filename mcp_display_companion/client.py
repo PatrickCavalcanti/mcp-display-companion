@@ -193,10 +193,19 @@ class PanelClient:
     def set_display(self, brightness: str | int) -> dict[str, Any]:
         return self.call_tool("set_display", {"brightness": brightness}, timeout=5)
 
-    def show_view(self, html: str, ttl_min: int = 0, title: str | None = None) -> str | None:
+    def show_view(
+        self,
+        html: str,
+        ttl_min: int = 0,
+        title: str | None = None,
+        connection: str | None = None,
+    ) -> str | None:
         arguments: dict[str, Any] = {"html": html, "ttl_min": ttl_min}
         if title:
             arguments["title"] = title
+        if connection:
+            # mixed screen: tool calls the destination knows go straight to it
+            arguments["connection"] = connection
         result = self.call_tool("show_view", arguments, timeout=20)
         return result.get("presentation")
 

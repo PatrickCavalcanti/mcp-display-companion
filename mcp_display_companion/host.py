@@ -19,7 +19,7 @@ import io
 import os
 import subprocess
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Callable
 
 VK_MEDIA_NEXT = 0xB0
@@ -379,7 +379,8 @@ FIREFOX_NAMES = {"firefox", "firefoxdeveloperedition", "waterfox", "librewolf"}
 
 def browser_family(exe: str) -> str | None:
     """`chromium`, `firefox`, or `None` when the flag is not known."""
-    name = Path(exe).stem.lower()
+    # Browser executables are Windows paths; PureWindowsPath splits "\\" on any OS (and still accepts "/").
+    name = PureWindowsPath(exe).stem.lower()
     if name in CHROMIUM_NAMES:
         return "chromium"
     if name in FIREFOX_NAMES:

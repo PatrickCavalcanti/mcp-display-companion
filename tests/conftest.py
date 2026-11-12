@@ -32,6 +32,7 @@ def isolated_io(monkeypatch, tmp_path):
     """Only the explicitly local HTTP fixture may use sockets; no process/OS actions."""
     from mcp_display_companion import config
     monkeypatch.delenv('PANEL_TOKEN', raising=False)
+    monkeypatch.setenv('PANEL_COMPANION_ALERTS', str(tmp_path / 'alerts'))
     monkeypatch.setattr(config, 'default_secrets_path', lambda: tmp_path / 'secrets.json')
     monkeypatch.setattr(config, 'default_cursor_path', lambda: tmp_path / 'cursor.json')
     def forbidden(*args, **kwargs):

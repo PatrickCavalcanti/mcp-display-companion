@@ -287,3 +287,95 @@ def test_gap_still_executes_new_events(runtime, touch):
     rt.tick()
     assert host.calls == [('press_key', (175,), {})]
     assert rt.cursor_store.load() == 43
+
+
+class _StopLoop(BaseException):
+    """Escapes Runtime.run(), whose loop swallows every Exception."""
+
+
+def test_reconnect_attempts_keep_the_watchdog_fed(runtime, monkeypatch):
+    # With the phone offline, each reconnect attempt is the loop working, not
+    # a COM/winrt hang: the watchdog must not kill the service every 120s.
+    from mcp_display_companion.client import PanelError
+    instance, client, *_ = runtime
+    clock = [5000.0]
+    monkeypatch.setattr('mcp_display_companion.runtime.time.time', lambda: clock[0])
+    monkeypatch.setattr('mcp_display_companion.runtime.time.sleep',
+                        lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr('mcp_display_companion.runtime.threading.Thread',
+                        lambda *a, **k: type('T', (), {'start': lambda self: None})())
+    instance._pulse = clock[0]
+    stalls = []
+
+    def connect():
+        client.connections += 1
+        stalls.append(clock[0] - instance._pulse)
+        if client.connections >= 40:  # ~40 failed attempts, well past 120s
+            raise _StopLoop
+        clock[0] += 8  # each attempt times out after a few seconds
+        raise PanelError('panel unreachable (timed out)')
+
+    client.connect = connect
+    with pytest.raises(_StopLoop):
+        instance.run()
+    assert clock[0] - 5000.0 > 120
+    assert max(stalls) < 120
+
+
+def test_publish_passes_connection_only_when_home_enabled(make_config, host, runtime):
+    from dataclasses import replace
+    from mcp_display_companion.config import HomeSection
+    rt, client, _, _, _ = runtime
+    rt._publish()
+    assert client.shows[-1][1]['connection'] is None
+    rt.config = replace(rt.config, home=HomeSection(enabled=True, connection='ha'))
+    rt._publish()
+    assert client.shows[-1][1]['connection'] == 'ha'
+
+
+def test_home_tool_touch_is_logged_not_executed(runtime, touch):
+    rt, client, host, _, now = runtime
+    logs = []
+    rt.log = logs.append
+    ev = touch(dados={'tool': 'intent__HassTurnOn', 'destino_indisponivel': True})
+    rt._handle(ev, now[0])
+    assert host.calls == [] and client.updates == []
+    assert any('home assistant unreachable: intent__HassTurnOn' in m for m in logs)
+    assert not any('malformed' in m for m in logs)
+
+
+def test_publish_without_home_marker_skips_connection_and_warns_once(make_config, host, runtime, tmp_path):
+    from dataclasses import replace
+    from mcp_display_companion.config import HomeSection, ViewSection
+    rt, client, _, _, _ = runtime
+    tpl = tmp_path / 'old.html'
+    tpl.write_text('<div id="trilho">{{PAGINA_ATALHOS}}</div>{{PONTOS}}', encoding='utf-8')
+    logs = []
+    rt.log = logs.append
+    rt.config = replace(rt.config, home=HomeSection(enabled=True, connection='ha'),
+                        view=ViewSection(template=tpl))
+    rt._publish(); rt._publish()
+    assert client.shows[-1][1]['connection'] is None
+    assert sum('template has no {{PAGINA_CASA}}; home page disabled' in m for m in logs) == 1
+
+
+def test_home_refresh_failures_are_muted_for_ten_minutes(runtime, touch):
+    rt, client, host, _, now = runtime
+    logs = []
+    rt.log = logs.append
+    clock = [10_000.0]
+    rt.clock = lambda: clock[0]
+    def ev(i, tool):
+        return touch(id=i, dados={'tool': tool, 'destino_indisponivel': True})
+    def refresh_logs():
+        return sum('unreachable (refresh)' in m for m in logs)
+    rt._handle(ev(50, 'homeassistant__GetLiveContext'), now[0])
+    clock[0] += 60
+    rt._handle(ev(51, 'homeassistant__GetLiveContext'), now[0])
+    assert refresh_logs() == 1
+    rt._handle(ev(52, 'intent__HassTurnOn'), now[0])
+    rt._handle(ev(53, 'intent__HassTurnOn'), now[0])
+    assert sum('unreachable: intent__HassTurnOn' in m for m in logs) == 2
+    clock[0] += 601
+    rt._handle(ev(54, 'homeassistant__GetLiveContext'), now[0])
+    assert refresh_logs() == 2

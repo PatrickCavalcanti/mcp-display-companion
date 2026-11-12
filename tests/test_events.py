@@ -30,3 +30,9 @@ def test_other(touch, kind):
 @pytest.mark.parametrize('event', [None, [], 'bad', {'tipo': 'toque'}, {'tipo': 'toque', 'dados': {}}])
 def test_malformed(event):
     assert classify(event).kind == events.MALFORMED
+
+
+@pytest.mark.parametrize('tool', sorted(events.HOME_TOOLS))
+def test_home_tool_touch_is_foreign_not_malformed(touch, tool):
+    result = classify(touch(dados={'tool': tool, 'destino_indisponivel': True}))
+    assert result.kind == events.FOREIGN and result.tool == tool and not result.should_run

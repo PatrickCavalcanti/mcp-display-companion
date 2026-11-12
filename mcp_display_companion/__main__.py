@@ -94,14 +94,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.check:
+        from .slideshow import SlideDeck
+
+        try:
+            view.render(cfg, has_slides=SlideDeck(cfg.slides).has_images() if cfg.slides.enabled else False)
+        except Exception as exc:  # a bad template only fails at run time, inside the reconnect loop
+            print(f"invalid view: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
         print(f"config           : {args.config}")
         print(f"panel            : {cfg.panel.url}")
         print(f"token            : {_mask(cfg.panel.token)}")
         print(f"cursor           : {cfg.panel.cursor_file}")
         print(f"log              : {cfg.loop.log_file}")
         print(f"view template    : {cfg.view.template}")
+        print(f"language         : {cfg.view.language}")
         print(f"weather          : {'enabled - ' + cfg.weather.label if cfg.weather.enabled else 'disabled'}")
         print(f"media            : {'enabled' if cfg.media.enabled else 'disabled'}")
+        print(f"home             : {'enabled' if cfg.home.enabled else 'disabled'}")
+        print(f"alerts           : {'enabled' if cfg.alerts.enabled else 'disabled'}")
         if cfg.slides.enabled:
             from .slideshow import SlideDeck
 

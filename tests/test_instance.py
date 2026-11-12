@@ -106,3 +106,26 @@ def test_owner_file_goes_away_on_release(tmp_path):
     assert lock.owner_file().exists()
     lock.release()
     assert not lock.owner_file().exists()
+
+
+# --------------------------------------------------------------------------- #
+# --check also renders the view and shows language, home and alerts
+# --------------------------------------------------------------------------- #
+def test_check_shows_language_home_and_alerts(tmp_path, capsys):
+    cfg_path = write_config(tmp_path / "clone")
+    assert main(["-c", str(cfg_path), "--check"]) == 0
+    out = capsys.readouterr().out
+    assert "language         : en" in out
+    assert "home             : " in out
+    assert "alerts           : " in out
+
+
+def test_check_fails_when_the_template_has_an_unknown_text_key(tmp_path, capsys):
+    template = tmp_path / "custom.html"
+    template.write_text("<html>{{T:no_such_key}}</html>", encoding="utf-8")
+    cfg_path = write_config(tmp_path / "clone")
+    data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    data["view"] = {"template": str(template)}
+    cfg_path.write_text(json.dumps(data), encoding="utf-8")
+    assert main(["-c", str(cfg_path), "--check"]) == 2
+    assert "invalid view" in capsys.readouterr().err

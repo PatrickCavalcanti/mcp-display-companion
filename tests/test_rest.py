@@ -88,6 +88,7 @@ def test_settings_page_renders_one_big_switch(make_config):
     assert 'data-acao-ligar="pc_descanso_ativar"' in html
     assert 'data-acao-desligar="pc_descanso_desativar"' in html
     assert "45 s" in html
+    assert 'id="p3"' in html and 'class="pagina pagina-ajustes"' in html
     # starts off: touch requests activation
     assert 'data-acao="pc_descanso_ativar"' in html
 
@@ -95,7 +96,7 @@ def test_settings_page_renders_one_big_switch(make_config):
 def test_settings_page_absent_without_rest_actions(make_config):
     html = view.render(make_config())
     assert 'class="config-item' not in html
-    assert 'id="p3"' not in html
+    assert 'id="p3"' not in html and 'id="p4"' not in html
 
 
 def test_pager_counts_pages(make_config):

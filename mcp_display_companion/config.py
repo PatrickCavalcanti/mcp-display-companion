@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .strings import DEFAULT_LANGUAGE, LANGUAGES
+
 # Action types that the service knows how to execute. See docs/actions.md.
 ACTION_TYPES = {
     "media",    # play/pause, next, previous (Windows: GSMTC; otherwise: media keys)
@@ -86,6 +88,18 @@ def default_lock_path() -> Path:
 def default_template() -> Path:
     """The template bundled with the package (the user can point to another)."""
     return Path(__file__).resolve().parent / "templates" / "painel.html"
+
+
+def default_alerts_dir() -> Path:
+    """Where the Claude Code hook drops one file per session waiting for permission."""
+    custom = os.environ.get("PANEL_COMPANION_ALERTS")
+    if custom:
+        return expand_path(custom)
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "mcp-display-companion" / "alerts"
 
 
 def default_cursor_path() -> Path:
@@ -362,11 +376,44 @@ class RestSection:
 
 
 @dataclass(frozen=True)
+class AlertsSection:
+    """Big banner on the panel while a Claude Code session waits for permission."""
+
+    enabled: bool = True
+    dir: Path = field(default_factory=default_alerts_dir)
+    max_age_s: int = 1800
+    wake: bool = True
+    brightness: str | int = "max"
+    allow_approve: bool = False  # True: the panel may approve (hold the button); False: deny only
+    dir_from_config: bool = False  # `dir` came from config.json (the hook only reads the env var)
+
+
+@dataclass(frozen=True)
+class HomeSection:
+    """Home control page (Home Assistant, reached by the panel's mixed screen).
+
+    The View calls the Home Assistant MCP tools directly, so this section only
+    names the connection and the entities to show.
+    """
+
+    enabled: bool = False
+    connection: str = "home-assistant"
+    title: str = "Home"
+    climate: str = "Air conditioner"
+    light: str = "Lamp"
+    area: str = "Home"
+    refresh_s: int = 30
+    temp_min: int = 16
+    temp_max: int = 30
+
+
+@dataclass(frozen=True)
 class ViewSection:
     template: Path = field(default_factory=default_template)
-    title: str = "Painel"
+    title: str = "Panel"
     show_clock: bool = True
     show_weather: bool = True
+    language: str = DEFAULT_LANGUAGE
 
 
 @dataclass(frozen=True)
@@ -381,6 +428,8 @@ class Config:
     weather: WeatherSection = field(default_factory=WeatherSection)
     media: MediaSection = field(default_factory=MediaSection)
     view: ViewSection = field(default_factory=ViewSection)
+    home: HomeSection = field(default_factory=HomeSection)
+    alerts: AlertsSection = field(default_factory=AlertsSection)
     base_dir: Path = field(default_factory=Path.cwd)
 
     @property
@@ -623,11 +672,72 @@ def load(path: str | Path) -> Config:
     template = expand_path(str(template_raw)) if template_raw else default_template()
     if not template.is_absolute():
         template = base_dir / template
+    language = view_raw.get("language", DEFAULT_LANGUAGE)
+    if language not in LANGUAGES:
+        raise ConfigError(
+            f"view.language must be one of {', '.join(LANGUAGES)}, got {language!r}"
+        )
     view = ViewSection(
         template=template,
-        title=str(view_raw.get("title") or "Painel"),
+        title=str(view_raw.get("title") or "Panel"),
         show_clock=bool(view_raw.get("show_clock", True)),
         show_weather=bool(view_raw.get("show_weather", True)),
+        language=language,
+    )
+
+    home_raw = raw.get("home") or {}
+    if not isinstance(home_raw, dict):
+        raise ConfigError("'home' must be an object")
+
+    def home_text(key: str, default: str) -> str:
+        value = home_raw.get(key, default)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"home.{key} must be a non-empty string, got {value!r}")
+        return value.strip()
+
+    home_enabled = home_raw.get("enabled", False)
+    if not isinstance(home_enabled, bool):
+        raise ConfigError(f"home.enabled must be true or false, got {home_enabled!r}")
+    home = HomeSection(
+        enabled=home_enabled,
+        connection=home_text("connection", "home-assistant"),
+        title=home_text("title", "Home"),
+        climate=home_text("climate", "Air conditioner"),
+        light=home_text("light", "Lamp"),
+        area=home_text("area", "Home"),
+        refresh_s=_as_int(home_raw.get("refresh_s", 30), "home.refresh_s", 5),
+        temp_min=_as_int(home_raw.get("temp_min", 16), "home.temp_min", 5),
+        temp_max=_as_int(home_raw.get("temp_max", 30), "home.temp_max", 5),
+    )
+    if home.temp_min >= home.temp_max:
+        raise ConfigError("home.temp_min must be lower than home.temp_max")
+
+    alerts_raw = raw.get("alerts") or {}
+    if not isinstance(alerts_raw, dict):
+        raise ConfigError("'alerts' must be an object")
+    for key in ("enabled", "wake", "allow_approve"):
+        if not isinstance(alerts_raw.get(key, True), bool):
+            raise ConfigError(f"alerts.{key} must be true or false, got {alerts_raw[key]!r}")
+    alerts_dir_raw = alerts_raw.get("dir")
+    if alerts_dir_raw is not None and (not isinstance(alerts_dir_raw, str) or not alerts_dir_raw.strip()):
+        raise ConfigError(f"alerts.dir must be a non-empty string, got {alerts_dir_raw!r}")
+    alerts_dir = expand_path(alerts_dir_raw) if alerts_dir_raw else default_alerts_dir()
+    if not alerts_dir.is_absolute():
+        alerts_dir = base_dir / alerts_dir
+    alerts_brightness = alerts_raw.get("brightness", display.brightness)
+    if not (
+        isinstance(alerts_brightness, int) and not isinstance(alerts_brightness, bool)
+        and 0 <= alerts_brightness <= 100
+    ) and alerts_brightness not in {"max", "min", "auto", "off"}:
+        raise ConfigError("alerts.brightness must be max, min, auto, off or 0..100")
+    alerts = AlertsSection(
+        enabled=alerts_raw.get("enabled", True),
+        dir=alerts_dir,
+        max_age_s=_as_int(alerts_raw.get("max_age_s", 1800), "alerts.max_age_s", 10),
+        wake=alerts_raw.get("wake", True),
+        brightness=alerts_brightness,
+        allow_approve=alerts_raw.get("allow_approve", False),
+        dir_from_config=bool(alerts_dir_raw),
     )
 
     return Config(
@@ -641,5 +751,7 @@ def load(path: str | Path) -> Config:
         weather=weather,
         media=media,
         view=view,
+        home=home,
+        alerts=alerts,
         base_dir=base_dir,
     )

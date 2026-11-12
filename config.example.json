@@ -4,7 +4,8 @@
     "%APPDATA%/mcp-display-companion/secrets.json (Windows) or",
     "~/.config/mcp-display-companion/secrets.json, as {\"panel_token\": \"...\"}.",
     "Documentation: docs/configuration.md and docs/actions.md.",
-    "Labels below are in Portuguese because they are the panel screen wording - translate them freely."
+    "Action labels are shown on the panel exactly as written here (they are not translated): write them in your language.",
+    "view.language (en or pt-BR) sets the language of the panel's own texts."
   ],
   "panel": {
     "url": "http://192.168.1.50:7777/mcp",
@@ -22,6 +23,13 @@
     "brightness": "max",
     "refresh_min": 5
   },
+  "alerts": {
+    "enabled": true,
+    "max_age_s": 1800,
+    "wake": true,
+    "brightness": "max",
+    "allow_approve": false
+  },
   "live": {
     "weather": {
       "enabled": true,
@@ -38,7 +46,8 @@
     }
   },
   "view": {
-    "title": "Painel",
+    "title": "Panel",
+    "language": "en",
     "show_clock": true,
     "show_weather": true
   },
@@ -54,14 +63,14 @@
     },
     {
       "id": "pc_midia_anterior",
-      "label": "Anterior",
+      "label": "Previous",
       "type": "media",
       "command": "previous",
       "icon": "prev"
     },
     {
       "id": "pc_midia_proxima",
-      "label": "Próxima",
+      "label": "Next",
       "type": "media",
       "command": "next",
       "icon": "next",
@@ -109,7 +118,7 @@
     },
     {
       "id": "pc_abrir_documentos",
-      "label": "Documentos",
+      "label": "Documents",
       "type": "folder",
       "path": "%USERPROFILE%/Documents",
       "icon": "folder",
@@ -117,7 +126,7 @@
     },
     {
       "id": "pc_bloquear",
-      "label": "Bloquear",
+      "label": "Lock",
       "type": "command",
       "cmd": [
         "rundll32.exe",
@@ -128,7 +137,7 @@
     },
     {
       "id": "pc_descanso_ativar",
-      "label": "Ativar descanso",
+      "label": "Turn on rest mode",
       "type": "rest",
       "state": true,
       "pages": [
@@ -137,7 +146,7 @@
     },
     {
       "id": "pc_descanso_desativar",
-      "label": "Desativar descanso",
+      "label": "Turn off rest mode",
       "type": "rest",
       "state": false,
       "pages": [
@@ -146,7 +155,7 @@
     },
     {
       "id": "pc_relogio_fotos_ativar",
-      "label": "Relógio sobre as fotos",
+      "label": "Clock over the photos",
       "type": "overlay",
       "state": true,
       "pages": [
@@ -155,7 +164,7 @@
     },
     {
       "id": "pc_relogio_fotos_desativar",
-      "label": "Sem relógio nas fotos",
+      "label": "No clock on the photos",
       "type": "overlay",
       "state": false,
       "pages": [
@@ -163,6 +172,17 @@
       ]
     }
   ],
+  "home": {
+    "enabled": false,
+    "connection": "home-assistant",
+    "title": "Home",
+    "climate": "Air conditioner",
+    "light": "Lamp",
+    "area": "Home",
+    "refresh_s": 30,
+    "temp_min": 16,
+    "temp_max": 30
+  },
   "rest": {
     "enabled": false,
     "idle_s": 60

@@ -153,7 +153,7 @@ The View tells the service this with two **reserved tool names**, handled by the
 service rather than by the configuration: `pc_rest_entered` (went dark) and
 `pc_rest_left` (woke up). They are not actions and cannot be changed.
 
-Page 3 — the settings page — exists when the config has a pair of `rest` actions
+Settings page (the `pages: [3]` of an action; `p3` in the View, or `p4` when the home page exists; style it by the class `pagina-ajustes`) — exists when the config has a pair of `rest` actions
 (`state: true` and `state: false`). The switch calls the one that matches the
 **new** state; the PC stores the value and sends it back on every publish, so it
 survives a reload of the screen.
@@ -166,12 +166,175 @@ survives a reload of the screen.
 ]
 ```
 
+## `alerts` — Claude Code asking for permission
+
+When any Claude Code session on this PC stops to ask for a **permission**, the
+panel shows a big **red** banner over whatever page is visible ("`<project>` asks for
+permission", the tool, and what it wants to do), wakes the screen, and drops the
+banner by itself as soon as you answer on the PC. With several sessions waiting
+the newest shows, with a `+N` badge.
+
+From the panel you can answer too (when the hook runs as `PermissionRequest`). These
+texts are in English; with `view.language: "pt-BR"` they show in Portuguese.
+
+* **Deny**: one tap.
+* **Hold to approve**: press and **hold 1.5 s** (a green fill shows the progress; release
+  early or move the finger to cancel). It only exists when you can read the whole
+  request: if the text was cut ("Long or hidden text — approve on the PC") or does not fit
+  the box until you scroll it to the end (the panel says "Scroll to the end of the text to enable Approve"), only Deny and × are offered. The hold
+  approves the request that was on screen when you pressed; if another one takes
+  its place, the hold is cancelled.
+* **×**: hides the banner without answering (the PC dialog stays).
+
+Approving from a wall panel is off by default (`allow_approve: false`: the panel
+can only deny). Turn it on only if you accept that whoever can touch the panel can
+approve what Claude Code asks to run. The request text is shown in full for `Bash`
+up to 1000 characters; a longer command, or a `Bash` call with unusual options
+(for example `dangerouslyDisableSandbox`), is marked as cut and cannot be approved
+from the panel. Other tools show their input as compact JSON up to 600
+characters. MCP tools show as `<server>: <operation>`.
+
+Without `PermissionRequest` (only the `Notification` fallback) the banner is just
+a warning: a tap on it hides it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | watch the alerts folder |
+| `dir` | `%APPDATA%\mcp-display-companion\alerts` / `~/.config/mcp-display-companion/alerts` (env `PANEL_COMPANION_ALERTS` overrides the default) | folder where the hook drops its files. **The hook only reads the env var `PANEL_COMPANION_ALERTS`**, never `config.json`: if you set `alerts.dir`, set the same path in that env var for Claude Code too (the service logs a warning at startup when `alerts.dir` is set) |
+| `max_age_s` | `1800` | older files are ignored and deleted (a hook that never saw the answer must not leave the banner up forever; minimum 10). A permission **request** is dropped after 300 s whatever this value is |
+| `wake` | `true` | on a **new** alert: leave rest mode on the View and set the brightness below |
+| `brightness` | same as `display.brightness` | `max`, `min`, `auto`, `off` or `0`..`100`, used while an alert shows (needs `display.enabled`) |
+| `allow_approve` | `false` | `true`: the panel may **approve** (hold the "Hold to approve" button). `false`: it can only deny (the button is hidden and the service never writes `allow`) |
+
+> **Security.** The alerts folder is a trust boundary: whoever can write
+> `*.answer` files there can approve tool calls. Keep it in a private per-user
+> folder; **never** put it in a shared, synced or network folder (OneDrive, Dropbox,
+> a share), or other people and devices could approve what Claude Code runs. The
+> service also accepts answers only from the View it published itself and only with
+> the per-alert secret it sent to that View (kept in memory, never written to disk).
+
+The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
+Register it in `~/.claude/settings.json`.
+
+> **Test one terminal (CLI) session first.** The hook waits for the panel's answer
+> up to its time limit (290 s). Depending on the client, the PC dialog may only
+> appear when the hook ends. So with the service or the phone off, a permission
+> request can take up to that limit; set `PANEL_COMPANION_ALERT_WAIT` (seconds) to
+> shorten it. The hook does not check whether the service is alive. Register the
+> hook, run a command that asks for permission in a terminal session, and check
+> that the prompt shows up promptly before you keep it registered globally.
+
+Do **not** call the script directly (`python script.py`): if the file is missing,
+Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
+"block / deny". Use this launcher instead: it exits 0 with no output when the
+script does not exist, and passes the script's own exit 0 through (use forward
+slashes in the path; `-I -S` keeps Python fast and isolated):
+
+* for the clear and `Notification` hooks (asynchronous):
+
+```
+C:/Python313/python.exe -I -S -c "import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
+```
+
+* for the `PermissionRequest` hook (synchronous, timeout above the hook's own 290 s
+  wait, `onFailure` continue so a crash falls back to the normal PC dialog): the
+  same command line, with `"timeout": 300` and `"onFailure": "continue"`.
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "timeout": 300, "onFailure": "continue",
+      "command": "C:/Python313/python.exe -I -S -c \"import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')\"" }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "async": true,
+      "command": "...same command..." }] }],
+    "PostToolUse":        [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "UserPromptSubmit":   [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "Stop":               [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }],
+    "SessionEnd":         [{ "hooks": [{ "type": "command", "async": true, "command": "...same command..." }] }]
+  }
+}
+```
+
+If `alerts.dir` is set (see the table), also set `PANEL_COMPANION_ALERTS` to the same
+path in the environment Claude Code runs in.
+
+How it works:
+
+* `PermissionRequest` writes `<session>-<h>-<random>.json` (`{session, project,
+  message, at, request: {tool, summary, truncated}, actionable: true}`; `h` is a
+  short hash of the tool call) and waits for the same name with `.answer`
+  (`allow` or `deny`). On an answer it prints the decision JSON for Claude Code and
+  removes both files. The hook waits up to 290 s and then exits with no output;
+  it does not check whether the service is running. Depending on the client, the
+  PC dialog may only appear when the hook ends. If you answer on the PC, the clear
+  events below delete the file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
+  `mcp__ccd_*` tools are never offered for approval (the hook does nothing).
+* `Notification` writes the plain `<session>.json`, unless a request alert of that
+  session already exists.
+* `PostToolUse` and `PostToolUseFailure` delete `<session>.json` and only the
+  request files of that same tool call (same `h`), so parallel calls and subagents
+  of one session keep their own banners. `UserPromptSubmit`, `Stop` and
+  `SessionEnd` delete every file of that session.
+* The hook prints nothing except a decision, and always exits 0. Test knob: env
+  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait (use a short value to limit the delay when the service or phone is off).
+
+The View sends the reserved tools `pc_alerta_dispensar` (arguments `{id}`) and
+`pc_alerta_responder` (arguments `{id, decisao: "allow"|"deny"}`). Like `pc_rest_*`
+they are handled by the service and need no entry in `actions`. The id must
+match `[A-Za-z0-9_-]{1,80}` and is required; dismiss only deletes `<id>.json` of a
+known alert and respond only writes `<id>.answer`, both inside `dir`, and respond
+only for an existing, fresh (under 300 s), actionable alert, with the `nonce` that
+the service sent for it. Both are ignored unless the touch comes from the View
+the service published (`apresentacao`). The list reaches the View as
+`update_view({"alertas": [{id, project, message, at, actionable?, nonce?, request?}, ...],
+"allow_approve": false})` (empty list when none) and is sent again after every
+reconnect or republish. It never republishes the View by itself: if the panel
+rejects the list, it retries the same list every 30 s and logs once. Files left
+behind (`*.answer` without a request, `.*.tmp` older than 60 s) are swept. Custom templates need the `#alerta` banner and the
+`aplicarAlertas` logic of `templates/painel.html`; `simularAlertas([...])` in a
+browser console previews it.
+
+## `home` — home control page (Home Assistant)
+
+An optional page between the shortcuts and the settings: air conditioner (power,
+target temperature, room temperature) and a light, for one room. The buttons call
+the Home Assistant MCP tools **directly from the panel** (a "mixed screen": the
+companion publishes the View with `connection`, and the panel sends the calls the
+destination knows straight to it), so they keep working with the PC off. If Home
+Assistant is unreachable the page says so and dims.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | the page exists only when `true` |
+| `connection` | `"home-assistant"` | name of the MCP connection approved on the phone (the destination) |
+| `title` | `"Home"` | title of the page |
+| `climate` | `"Air conditioner"` | friendly name of the climate entity |
+| `light` | `"Lamp"` | friendly name of the light entity |
+| `area` | `"Home"` | kept for compatibility; no longer used (the state is read by name and domain) |
+| `refresh_s` | `30` | seconds between state refreshes (minimum 5); a refresh also runs after each action |
+| `temp_min` / `temp_max` | `16` / `30` | limits of the − / + buttons (1 °C steps) |
+
+Page order is slideshow (`p0`), clock (`p1`), shortcuts (`p2`), **home (`p3`)**,
+settings (`p4`, or `p3` when there is no home page); each exists only when it has content. The tools used (prefixed
+as the Home Assistant server publishes them) are `intent__HassTurnOn`,
+`intent__HassTurnOff`, `climate__HassClimateSetTemperature` and
+`homeassistant__GetLiveContext`. If the panel cannot reach the destination it
+turns such a call into an event for the companion, which only logs
+`home assistant unreachable: <tool>` (failed state refreshes are logged at most once per 10 minutes). The entities must be **exposed to Assist** in Home Assistant to appear. A custom `view.template` must contain the
+`{{PAGINA_CASA}}` placeholder (after `{{PAGINA_ATALHOS}}`) to show the page; without it the page is dropped (and the service logs `template has no {{PAGINA_CASA}}; home page disabled`).
+
+```json
+"home": { "enabled": true, "connection": "home-assistant", "title": "Home", "climate": "Air conditioner", "light": "Lamp", "area": "Home" }
+```
+
 ## `view`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `template` | the one shipped in the package | another `painel.html`-style template |
-| `title` | `"Painel"` | |
+| `template` | the one shipped in the package | another `painel.html`-style template. A copy made before 1.1 keeps its own fixed texts and ignores `view.language`: copy the current template again to get the language |
+| `title` | `"Panel"` | name of the View on the phone (data from you, never translated) |
+| `language` | `"en"` | language of the panel's own texts: `"en"` or `"pt-BR"`. Covers the fixed texts on the screen (page titles, status line, settings, Home page, alert banner), the day and month names and the date format. The weather condition text follows the language too. The alert banner's fixed texts (title, buttons, notices) follow it, but the request summary and the `Notification` message come from Claude Code and the hook and show as they arrive (English). The hook is not aware of the language. Action labels come from your `actions` and are shown as you wrote them; they are not translated. Any other value is a configuration error. |
 | `show_clock` | `true` | clock card on page 1 |
 | `show_weather` | `true` | weather card on page 1 (also needs `live.weather.enabled`) |
 
@@ -215,3 +378,69 @@ not against where the service was started.
 
 Application targets that are not paths (`spotify:`, `ms-settings:`, `notepad.exe`)
 are passed through untouched.
+
+## Writing actions: quick notes
+
+A minimal `config.json` (see `config.example.json` for a full one):
+
+```json
+{
+  "panel": { "url": "http://192.168.1.50:7777/mcp", "subscribe": true },
+  "live": {
+    "weather": { "enabled": true, "latitude": -23.55, "longitude": -46.63, "label": "Sao Paulo" },
+    "media":   { "enabled": true, "cover": true }
+  },
+  "actions": [
+    { "id": "pc_midia_play_pause", "label": "Play/Pause", "type": "media",
+      "command": "play_pause", "icon": "playpause", "page": 1, "featured": true },
+    { "id": "pc_abrir_downloads", "label": "Downloads", "type": "folder",
+      "path": "%USERPROFILE%/Downloads", "icon": "download", "color": "#38bdf8" }
+  ]
+}
+```
+
+- **`id`** is the tool name the View calls on a touch. Keep a `pc_` prefix: with
+  a mixed screen, a name that also exists on the connection goes to the
+  connection, not to you.
+- **`page: 1` + `featured: true`** is the big button on the first page (the media
+  banner, if the action is `media`); everything else goes to the shortcut grid.
+- **Icons** come from `mcp_display_companion/icons.py`; anything else can use
+  `icon_svg` with an inline path.
+- Adding a button = adding an action. Adding a *new kind* of action = a method in
+  `actions.py` (`_run_<type>`) plus a `Host` call.
+
+## Panel layout and rest mode details
+
+**Held upright (portrait).** The design is drawn for the panel lying on its side
+(692x360). Upright, the same screen rearranges itself into a column: big clock on
+top, weather and the featured button stacked, shortcuts in two wide columns,
+smaller switches, and the clock over the photos bound to the screen width. That is
+one `@media (orientation:portrait)` block in `templates/painel.html`; the
+landscape design does not change. A landscape photo on an upright screen is
+cropped from the centre: for the presentation, prefer photos in that shape.
+
+**Rest mode.** A switch on the settings page turns rest mode on or off. When it
+is on, after `rest.idle_s` seconds without a touch the screen turns itself into
+the first page in pure black with white text and no album cover (the cheap pixels
+of an OLED), and the first touch wakes it. The choice is stored on the PC, so
+reloading the screen does not forget it. Going dark also drops the device
+brightness to the minimum and puts it back on the first touch. Off is the
+default: the screen simply stays on.
+
+**Clock over the photos.** The clock measures the picture: it picks white ink on
+a dark photo and dark ink on a light one, adds a thin outline in the opposite
+tone and frosts (blurs) only the patch behind the text, so a bright sky or a busy
+tree does not wash the time out.
+
+## Security notes
+
+- The token is never in the repository, never in the log and never printed (the
+  `--check` summary shows a masked version). See [Token](#token).
+- The panel is **data, not instructions**: the service only runs actions that are
+  declared in `config.json`. A touch carries an action id, never a command line.
+  It does not evaluate anything that comes from the panel.
+- The service asks nobody for confirmation: a configured button runs. So **do not
+  configure** power-off, delete or spend actions on a panel that other people can
+  touch. The panel is a remote control for *your* computer.
+- Approving Claude Code permissions from the panel is off by default; see
+  [`alerts`](#alerts--claude-code-asking-for-permission).

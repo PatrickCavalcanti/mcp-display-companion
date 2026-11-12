@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The panel is in English by default. Set `"language": "pt-BR"` in `view` to keep Portuguese.
 - Example config labels are in English.
+- An empty `APPDATA` or `XDG_CONFIG_HOME` now means "use the default folder" for the token, the cursor and the alerts. If you ran the service with that variable set to an empty string, set the token again.
 
 ### Fixed
 

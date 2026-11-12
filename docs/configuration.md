@@ -286,7 +286,8 @@ on several events (`PreToolUse`, `UserPromptSubmit`, `Stop` and others), while o
 `PermissionRequest` it is not honored and the permission flow goes on unchanged
 (see "Exit code 2 behavior per event" in <https://code.claude.com/docs/en/hooks>).
 This hook is only registered for `PermissionRequest`, `Notification` and the
-clearing events, so a missing script would not block anything today. The launcher
+clearing events, and the clearing hooks run asynchronously, so a missing script
+would not block anything today. The launcher
 below avoids depending on that: it exits 0 with no output when the script does not
 exist, and passes the script's own exit 0 through (use forward
 slashes in the path; `-I -S` keeps Python fast and isolated). On Windows use the

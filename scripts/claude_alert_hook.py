@@ -200,7 +200,7 @@ def alive_max_age():
         value = float(os.environ.get("PANEL_COMPANION_ALIVE_MAX_AGE", ALIVE_MAX_AGE_S))
     except ValueError:
         return ALIVE_MAX_AGE_S
-    if not value > 0:  # also catches NaN
+    if not 0 < value < float("inf"):  # also catches NaN
         return ALIVE_MAX_AGE_S
     return max(1.0, value)
 

@@ -191,8 +191,9 @@ to the log.
 > **Warning:** while the button is on, the keys are physically held down in the
 > system — every other key you type is combined with them. Tap the button again
 > to release them. The service releases everything it holds when it stops
-> normally, when the panel goes out of reach (the phone is off or the connection
-> drops), and at the next start (see below).
+> normally, whenever it has to reconnect to the panel (the phone is off, the
+> connection drops or the panel session is renewed), and at the next start (see
+> below).
 >
 > It does **not** release them when the process is killed by force. That includes
 > stopping, reinstalling or removing the service with the installer

@@ -54,7 +54,7 @@ _EN = {
     "weather_city_placeholder": "weather",
     "weather_updated": "updated {time}",
     # media banner
-    "media_default_title": "Media on the PC",
+    "media_default_title": "PC media",
     "media_waiting_player": "waiting for the player",
     "media_playing": "Playing",
     "media_paused": "Paused",
@@ -71,7 +71,7 @@ _EN = {
     "settings_rest_on": "On — the screen dims after {seconds} s without touch",
     "settings_clock_title": "Clock over the photos",
     "settings_clock_off": "Off — the photo stays clean, nothing on top",
-    "settings_clock_on": "On — large translucent time over the image",
+    "settings_clock_on": "On — large translucent clock over the image",
     # home control page
     "home_air": "Air",
     "home_light": "Light",
@@ -99,7 +99,7 @@ _EN = {
     "alert_deny": "Deny",
     "alert_approve_hold": "Hold to approve",
     "alert_sent": "sent…",
-    "alert_scroll_to_approve": "Scroll the text to the end to enable Approve",
+    "alert_scroll_to_approve": "Scroll to the end of the text to enable Approve",
     "alert_long_text": "Long or hidden text — approve on the PC",
     "alert_no_key": "No reply key — answer on the PC",
     "alert_no_connection": "No connection to the PC — nothing was sent",

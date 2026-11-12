@@ -150,7 +150,7 @@ def test_home_defaults_and_values(load_config, raw_config):
     raw_config['home'] = {'enabled': True, 'climate': 'AC', 'temp_min': 18, 'temp_max': 28, 'refresh_s': 10}
     home = load_config(raw_config).home
     assert (home.enabled, home.climate, home.temp_min, home.temp_max, home.refresh_s) == (True, 'AC', 18, 28, 10)
-    assert home.title == 'Escritório' and home.area == 'Escritório'
+    assert home.title == 'Home' and home.area == 'Home'
 
 
 @pytest.mark.parametrize('home', [{'enabled': 'yes'}, {'climate': ''}, {'refresh_s': 'x'},

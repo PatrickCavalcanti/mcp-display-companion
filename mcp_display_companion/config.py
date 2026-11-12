@@ -396,10 +396,10 @@ class HomeSection:
 
     enabled: bool = False
     connection: str = "home-assistant"
-    title: str = "Escritório"
-    climate: str = "Ar Escritório"
-    light: str = "Luz Escritório"
-    area: str = "Escritório"
+    title: str = "Home"
+    climate: str = "Air conditioner"
+    light: str = "Lamp"
+    area: str = "Home"
     refresh_s: int = 30
     temp_min: int = 16
     temp_max: int = 30
@@ -692,10 +692,10 @@ def load(path: str | Path) -> Config:
     home = HomeSection(
         enabled=home_enabled,
         connection=home_text("connection", "home-assistant"),
-        title=home_text("title", "Escritório"),
-        climate=home_text("climate", "Ar Escritório"),
-        light=home_text("light", "Luz Escritório"),
-        area=home_text("area", "Escritório"),
+        title=home_text("title", "Home"),
+        climate=home_text("climate", "Air conditioner"),
+        light=home_text("light", "Lamp"),
+        area=home_text("area", "Home"),
         refresh_s=_as_int(home_raw.get("refresh_s", 30), "home.refresh_s", 5),
         temp_min=_as_int(home_raw.get("temp_min", 16), "home.temp_min", 5),
         temp_max=_as_int(home_raw.get("temp_max", 30), "home.temp_max", 5),

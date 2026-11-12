@@ -173,10 +173,10 @@
   "home": {
     "enabled": false,
     "connection": "home-assistant",
-    "title": "Escritório",
-    "climate": "Ar Escritório",
-    "light": "Luz Escritório",
-    "area": "Escritório",
+    "title": "Home",
+    "climate": "Air conditioner",
+    "light": "Lamp",
+    "area": "Home",
     "refresh_s": 30,
     "temp_min": 16,
     "temp_max": 30

@@ -304,10 +304,10 @@ Assistant is unreachable the page says so and dims.
 |---|---|---|
 | `enabled` | `false` | the page exists only when `true` |
 | `connection` | `"home-assistant"` | name of the MCP connection approved on the phone (the destination) |
-| `title` | `"Escritório"` | title of the page |
-| `climate` | `"Ar Escritório"` | friendly name of the climate entity |
-| `light` | `"Luz Escritório"` | friendly name of the light entity |
-| `area` | `"Escritório"` | kept for compatibility; no longer used (the state is read by name and domain) |
+| `title` | `"Home"` | title of the page |
+| `climate` | `"Air conditioner"` | friendly name of the climate entity |
+| `light` | `"Lamp"` | friendly name of the light entity |
+| `area` | `"Home"` | kept for compatibility; no longer used (the state is read by name and domain) |
 | `refresh_s` | `30` | seconds between state refreshes (minimum 5); a refresh also runs after each action |
 | `temp_min` / `temp_max` | `16` / `30` | limits of the − / + buttons (1 °C steps) |
 
@@ -321,7 +321,7 @@ turns such a call into an event for the companion, which only logs
 `{{PAGINA_CASA}}` placeholder (after `{{PAGINA_ATALHOS}}`) to show the page; without it the page is dropped (and the service logs `template has no {{PAGINA_CASA}}; home page disabled`).
 
 ```json
-"home": { "enabled": true, "connection": "home-assistant", "climate": "Ar Escritório", "light": "Luz Escritório", "area": "Escritório" }
+"home": { "enabled": true, "connection": "home-assistant", "title": "Home", "climate": "Air conditioner", "light": "Lamp", "area": "Home" }
 ```
 
 ## `view`

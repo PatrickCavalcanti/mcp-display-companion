@@ -68,6 +68,14 @@ class Host:
         self.log(f"press_key({vk}) not implemented on {self.name}")
         return False
 
+    def key_down(self, vk: int) -> bool:
+        self.log(f"key_down({vk}) not implemented on {self.name}")
+        return False
+
+    def key_up(self, vk: int) -> bool:
+        self.log(f"key_up({vk}) not implemented on {self.name}")
+        return False
+
     def media(self, command: str) -> bool:
         """play_pause / next / previous."""
         return self.press_key(MEDIA_KEYS[command])
@@ -161,6 +169,42 @@ class WindowsHost(Host):
             return True
         except Exception as exc:  # noqa: BLE001
             self.log(f"key {vk:#x} failed: {exc}")
+            return False
+
+    # extended keys need KEYEVENTF_EXTENDEDKEY (1); key release is KEYEVENTF_KEYUP (2).
+    # Per Microsoft ("Keyboard Input Overview", Extended-Key Flag): right Alt/Ctrl, the
+    # Ins/Del/Home/End/PgUp/PgDn/arrow cluster, Break, Print Screen, numpad Divide,
+    # Windows and Application keys. Num Lock and right Shift are NOT extended.
+    _EXTENDED_VKS = (
+        0x03,  # VK_CANCEL (Ctrl+Break)
+        0x21, 0x22, 0x23, 0x24,  # PgUp, PgDn, End, Home
+        0x25, 0x26, 0x27, 0x28,  # left, up, right, down
+        0x2C, 0x2D, 0x2E,  # Print Screen, Insert, Delete
+        0x5B, 0x5C, 0x5D,  # left Win, right Win, Application
+        0x6F,  # numpad Divide
+        0xA3, 0xA5,  # right Ctrl, right Alt
+    )
+
+    def key_down(self, vk: int) -> bool:
+        try:
+            import ctypes
+
+            flags = 1 if vk in self._EXTENDED_VKS else 0
+            ctypes.windll.user32.keybd_event(vk, 0, flags, 0)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"key_down {vk:#x} failed: {exc}")
+            return False
+
+    def key_up(self, vk: int) -> bool:
+        try:
+            import ctypes
+
+            flags = 2 | (1 if vk in self._EXTENDED_VKS else 0)
+            ctypes.windll.user32.keybd_event(vk, 0, flags, 0)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"key_up {vk:#x} failed: {exc}")
             return False
 
     def media(self, command: str) -> bool:

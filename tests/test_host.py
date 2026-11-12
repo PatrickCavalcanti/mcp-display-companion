@@ -198,3 +198,69 @@ def test_folder_reuse_falls_back_to_a_new_window(monkeypatch, allow_foreground):
     launch = Launcher()
     assert make_host(launch, allow_foreground).open_folder(path, reuse_window=True) is True
     assert launch.calls == [["explorer.exe", str(path)]]
+
+
+# --------------------------------------------------------------------------- #
+# held keys: the generic host refuses, the Windows host calls keybd_event
+# --------------------------------------------------------------------------- #
+def test_generic_host_key_down_and_up_fail_with_a_message():
+    messages = []
+    generic = host_module.Host(log=messages.append)
+    assert generic.key_down(0x11) is False
+    assert generic.key_up(0x11) is False
+    assert len(messages) == 2 and all("not implemented" in m for m in messages)
+
+
+@pytest.mark.parametrize("vk,down,up", [
+    (0x11, 0, 2),   # ctrl: plain key
+    (0x5B, 1, 3),   # left win: extended key
+    (0xA3, 1, 3),   # right ctrl: extended key
+])
+def test_windows_host_key_events_flags(monkeypatch, allow_foreground, vk, down, up):
+    import ctypes
+    import types
+    events = []
+    fake_user32 = types.SimpleNamespace(keybd_event=lambda *a: events.append(a))
+    monkeypatch.setattr(ctypes, "windll", types.SimpleNamespace(user32=fake_user32), raising=False)
+    host = make_host(Launcher(), allow_foreground)
+    assert host.key_down(vk) is True
+    assert host.key_up(vk) is True
+    assert events == [(vk, 0, down, 0), (vk, 0, up, 0)]
+
+
+@pytest.mark.parametrize("vk", [
+    0xA5,                      # right Alt
+    0x21, 0x22, 0x23, 0x24,    # PgUp PgDn End Home
+    0x25, 0x26, 0x27, 0x28,    # arrows
+    0x2D, 0x2E, 0x5D,          # Insert Delete Application
+])
+def test_windows_host_marks_every_extended_key(monkeypatch, allow_foreground, vk):
+    import ctypes
+    import types
+    events = []
+    fake_user32 = types.SimpleNamespace(keybd_event=lambda *a: events.append(a))
+    monkeypatch.setattr(ctypes, "windll", types.SimpleNamespace(user32=fake_user32), raising=False)
+    host = make_host(Launcher(), allow_foreground)
+    host.key_down(vk)
+    host.key_up(vk)
+    assert events == [(vk, 0, 1, 0), (vk, 0, 3, 0)]
+
+
+def test_named_modifier_keys_match_the_extended_list(monkeypatch, allow_foreground):
+    """Right Ctrl/Alt and both Windows keys are extended; left Ctrl/Alt and either Shift are not."""
+    import ctypes
+    import types
+    from mcp_display_companion.config import NAMED_KEYS
+    events = []
+    fake_user32 = types.SimpleNamespace(keybd_event=lambda *a: events.append(a))
+    monkeypatch.setattr(ctypes, "windll", types.SimpleNamespace(user32=fake_user32), raising=False)
+    host = make_host(Launcher(), allow_foreground)
+    flagged = {}
+    for name, vk in NAMED_KEYS.items():
+        events.clear()
+        host.key_down(vk)
+        flagged[name] = events[0][2]
+    for name in ("rctrl", "ralt", "win", "lwin", "windows", "rwin"):
+        assert flagged[name] == 1, name
+    for name in ("ctrl", "control", "lctrl", "alt", "lalt", "shift", "lshift", "rshift"):
+        assert flagged[name] == 0, name

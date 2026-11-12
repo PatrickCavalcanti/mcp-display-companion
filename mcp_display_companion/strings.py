@@ -141,7 +141,7 @@ _PT_BR = {
     "clock_month_11": "dezembro",
     "clock_date": "{day} de {month} de {year}",
     "weather_waiting": "aguardando dados",
-    "weather_city_placeholder": "weather",
+    "weather_city_placeholder": "clima",
     "weather_updated": "atualizado {time}",
     "media_default_title": "Mídia no computador",
     "media_waiting_player": "aguardando o player",
@@ -189,7 +189,7 @@ _PT_BR = {
     "alert_no_key": "Sem chave de resposta — responda no PC",
     "alert_no_connection": "Sem conexão com o PC — nada foi enviado",
     "alert_too_many_taps": "Muitos toques, aguarde",
-    "nav_page": "Page {n}",
+    "nav_page": "Página {n}",
 }
 
 STRINGS: dict[str, dict[str, str]] = {"en": _EN, "pt-BR": _PT_BR}

@@ -10,6 +10,7 @@ class FakeHost:
     def __init__(self):
         self.calls = []
         self.info = None
+        self.key_down_ok = True
 
     def _record(self, name, *args, **kwargs):
         self.calls.append((name, args, kwargs))
@@ -17,6 +18,10 @@ class FakeHost:
 
     def media(self, command): return self._record('media', command)
     def press_key(self, vk): return self._record('press_key', vk)
+    def key_down(self, vk):
+        self._record('key_down', vk)
+        return self.key_down_ok
+    def key_up(self, vk): return self._record('key_up', vk)
     def volume(self, direction): return self._record('volume', direction)
     def open_folder(self, path, reuse_window=False): return self._record('open_folder', path, reuse_window=reuse_window)
     def open_app(self, target): return self._record('open_app', target)

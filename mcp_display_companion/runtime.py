@@ -67,6 +67,7 @@ ALERT_TOOL_MAX = 140
 ALERT_ORPHAN_ANSWER_S = 2.0
 ALERT_TMP_MAX_AGE_S = 60.0
 ALERT_RETRY_S = 30.0
+ALERT_ALIVE_FILE = ".service-alive"  # the hook reads it; see scripts/claude_alert_hook.py
 
 
 def setup_log(path: Path) -> Callable[[str], None]:
@@ -198,6 +199,10 @@ class Runtime:
         self._alerts_nonce: dict[str, str] = {}
         self._alerts_fail_sig: tuple | None = None  # signature the View rejected
         self._alerts_retry_at = 0.0
+        self._alive_failed = False
+        # True while the previous tick finished (the panel answered); False after a
+        # reconnect or an aborted tick. Lets a slow tick renew the sign of life early.
+        self._tick_ok = False
 
 
 
@@ -213,7 +218,10 @@ class Runtime:
                     f"WATCHDOG: loop has stalled for {stalled:.0f}s "
                     "(COM/winrt hang?). Exiting for supervisor restart."
                 )
-                os._exit(9)
+                try:
+                    self.runner.release_all_held_keys()
+                finally:
+                    os._exit(9)
 
     # ------------------------------------------------------------------ #
     # rest mode (display preference, saved on PC)
@@ -349,6 +357,40 @@ class Runtime:
                 f"{a['project'] or '?'} ({a['id'][:8]})" for a in active if (a["id"], a["at"]) in new))
             if cfg.wake:
                 self._wake_screen()
+
+    def _renew_alive(self) -> None:
+        """Tell the hook the panel is reachable: `<alerts>/.service-alive`, atomic.
+
+        Called at the end of a tick that read the panel's events, never while the
+        service reconnects, so the hook does not wait for a banner that cannot show.
+        """
+        cfg = self.config.alerts
+        if not cfg.enabled:
+            return
+        folder = Path(cfg.dir)
+        tmp = folder / f"{ALERT_ALIVE_FILE}.{os.getpid()}.tmp"
+        error: OSError | None = None
+        # On Windows os.replace can fail with "access denied" while the hook has
+        # the file open for a moment: one immediate second try.
+        for _ in range(2):
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                tmp.write_text(json.dumps({"at": time.time(), "pid": os.getpid()}), encoding="utf-8")
+                os.replace(tmp, folder / ALERT_ALIVE_FILE)
+                error = None
+                break
+            except OSError as exc:
+                error = exc
+                self._remove_quietly(str(tmp))
+        if error is None:
+            self._alive_failed = False
+        elif not self._alive_failed:
+            self._alive_failed = True
+            self.log(f"could not write the service sign of life: {error}")
+
+    def _clear_alive(self) -> None:
+        if self.config.alerts.enabled:
+            self._remove_quietly(str(Path(self.config.alerts.dir) / ALERT_ALIVE_FILE))
 
     def _warn_alerts_dir(self) -> None:
         cfg = self.config.alerts
@@ -524,8 +566,7 @@ class Runtime:
             self._publish()
             self._send(self.live.snapshot(), allow_republish=False)
         # View reloaded: send persisted preferences for switches
-        self._send(self._rest_payload(), allow_republish=False)
-        self._send(self._photo_clock_payload(), allow_republish=False)
+        self._send_states()
         self._alerts_sent = None  # the View may have reloaded: send the list again
         self._alerts_fail_sig = None
         if self.config.panel.subscribe and not self._stream_started:
@@ -534,6 +575,19 @@ class Runtime:
             self.client.subscribe(self._wake.set)
         if self.config.display.enabled:
             self._set_display(str(self._normal_brightness()))
+
+    def _send_states(self) -> None:
+        """Send the service-side state a freshly published View does not know.
+
+        Called after every successful `_publish`: rest mode, photo clock and (only
+        when a `hotkey_toggle` action exists) which keys are held. Never republishes,
+        so it cannot start a republish loop.
+        """
+        self._send(self._rest_payload(), allow_republish=False)
+        self._send(self._photo_clock_payload(), allow_republish=False)
+        toggles = self.runner.hotkey_states()
+        if toggles:
+            self._send({"toggles": toggles}, allow_republish=False)
 
     def _set_display(self, brightness: str | int) -> None:
         try:
@@ -583,6 +637,7 @@ class Runtime:
         try:
             self._publish()
             self._send(self.live.snapshot(), allow_republish=False)
+            self._send_states()
             self.client.update_view(data, presentation=self.presentation)
             self._republish_attempts = 0
             return True
@@ -619,6 +674,11 @@ class Runtime:
         """One round: heartbeat, live data feeds, events. Public for tests."""
         self._pulse = time.time()
         now = self.clock()
+        # A tick can outlast the hook's patience (publish + weather + media). The
+        # previous round proved the panel answers, so say so before the slow part.
+        if self._tick_ok:
+            self._renew_alive()
+        self._tick_ok = False
 
         if now - self._last_heartbeat >= self.config.loop.heartbeat_s:
             self._last_heartbeat = now
@@ -644,6 +704,7 @@ class Runtime:
             self.log("image list changed; republishing view")
             try:
                 self._publish()
+                self._send_states()
             except PanelError as exc:
                 self.log(f"could not republish: {exc}")
 
@@ -660,6 +721,9 @@ class Runtime:
             self._cursor_dirty = self.cursor_store.load() != self.cursor
 
         self._read_events(now)
+        # last on purpose: reaching here means the panel answered this round
+        self._renew_alive()
+        self._tick_ok = True
 
     def _read_events(self, now: float) -> None:
         first = self.cursor is None
@@ -743,6 +807,8 @@ class Runtime:
                 delivery.update(self._rest_payload())
             if action is not None and action.type == "overlay":
                 delivery.update(self._photo_clock_payload())
+            if action is not None and action.type == "hotkey_toggle":
+                delivery["toggles"] = {action.id: self.runner.is_hotkey_active(action.id)}
             if delivery:
                 sent = self._send(
                     delivery,
@@ -779,35 +845,41 @@ class Runtime:
     def run(self) -> None:
         self.log("=========== service started ===========")
         self._warn_alerts_dir()
+        self.runner.release_configured_hotkeys()  # a killed run may have left keys held
         threading.Thread(target=self._watchdog, daemon=True, name="watchdog").start()
 
-        while True:
-            # A reconnect attempt is the loop working, not a hang: with the
-            # phone offline, tick() never runs, and without this pulse the
-            # watchdog would kill the service every WATCHDOG_LIMIT_S.
-            self._pulse = time.time()
-            try:
-                self._connect()
-                self.log("listening for panel touches")
-                while True:
-                    self.tick()
-                    self._renew_stream()
-                    wait_time = SLOW_POLL_S if self.client.stream_ok.is_set() else self._poll_wait()
-                    if self._wake.wait(timeout=wait_time):
-                        self._wake.clear()
-            except SessionGone as exc:
-                self.log(f"{exc}; reconnecting")
-                self._reconnect()
-            except RateLimited as exc:
-                self.log(f"{exc}; waiting 2s")
-                time.sleep(2)
-            except PanelError as exc:
-                self.log(f"transport failed ({exc}); reconnecting in 5s")
-                time.sleep(5)
-                self._reconnect()
-            except Exception:  # noqa: BLE001 - loop must survive transient exceptions
-                self.log(f"unexpected error in loop:\n{traceback.format_exc()}")
-                self._reconnect()
+        try:
+            while True:
+                # A reconnect attempt is the loop working, not a hang: with the
+                # phone offline, tick() never runs, and without this pulse the
+                # watchdog would kill the service every WATCHDOG_LIMIT_S.
+                self._pulse = time.time()
+                try:
+                    self._connect()
+                    self.log("listening for panel touches")
+                    while True:
+                        self.tick()
+                        self._renew_stream()
+                        wait_time = SLOW_POLL_S if self.client.stream_ok.is_set() else self._poll_wait()
+                        if self._wake.wait(timeout=wait_time):
+                            self._wake.clear()
+                except SessionGone as exc:
+                    self.log(f"{exc}; reconnecting")
+                    self._reconnect()
+                except RateLimited as exc:
+                    self.log(f"{exc}; waiting 2s")
+                    time.sleep(2)
+                except PanelError as exc:
+                    self.log(f"transport failed ({exc}); reconnecting in 5s")
+                    time.sleep(5)
+                    self._reconnect()
+                except Exception:  # noqa: BLE001 - loop must survive transient exceptions
+                    self.log(f"unexpected error in loop:\n{traceback.format_exc()}")
+                    self._reconnect()
+        finally:
+            # service stopping (normal exit or exception): never leave keys held down
+            self.runner.release_all_held_keys()
+            self._clear_alive()
 
     def _poll_wait(self) -> float:
         """Without SSE, polling uses `panel.poll_ms` (default 0.7s)."""
@@ -831,6 +903,13 @@ class Runtime:
         self._renew_stream()
 
     def _reconnect(self) -> None:
+        self._clear_alive()  # no panel to show a banner: the hook must not wait for one
+        self._tick_ok = False
+        # No panel means no button to release the keys, and the phone may stay away
+        # for hours: let go now. `_connect` sends the toggles again (all false).
+        if self.runner.held_hotkeys:
+            self.log("panel lost; releasing held keys")
+            self.runner.release_all_held_keys()
         self.client.session_id = None
         self._stream_started = False
         self._last_subscription = 0.0

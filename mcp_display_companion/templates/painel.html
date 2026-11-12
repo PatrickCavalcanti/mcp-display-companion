@@ -204,6 +204,11 @@ body.descanso .slide-fundo{display:none!important}
 .btn.destaque.featured svg{width:40px;height:40px}
 .btn.destaque.featured .lbl{font-size:15px;font-weight:700;color:#fff}
 
+/* hotkey_toggle with its keys held: accent border and a tinted card */
+.btn.retido{border-color:var(--acc);background:color-mix(in srgb, var(--acc) 26%, var(--card))}
+.btn.retido .ico{background:color-mix(in srgb, var(--acc) 40%, transparent);color:#fff}
+.btn.retido .lbl{color:var(--txt)}
+
 .btn.espera, .btn-midia-banner.espera{box-shadow:0 0 0 2px #f0b429,var(--sombra)}
 .btn.ok, .btn-midia-banner.ok{background:#14532d;border-color:#2f9e5c}
 .btn.erro, .btn-midia-banner.erro{background:#7a1f2b;border-color:#e0555f}
@@ -597,6 +602,19 @@ fitClock();
 setInterval(function () { relogio(); fitClock(); }, 1000);
 
 /* ---------------- dados que o PC manda ---------------- */
+/* hotkey_toggle: {action id: held?} -> the button of that action shows it */
+function aplicarToggles(t) {
+  if (!t || typeof t !== 'object') return;
+  Object.keys(t).forEach(function (acao) {
+    var retido = t[acao] === true;
+    todos('.btn-clicavel').forEach(function (b) {
+      if (b.getAttribute('data-acao') !== acao) return;
+      b.classList.toggle('retido', retido);
+      b.setAttribute('aria-pressed', retido ? 'true' : 'false');
+    });
+  });
+}
+
 function aplicar(d) {
   if (!d || typeof d !== 'object') return;
   if (d.slide) showSlide(d.slide);
@@ -604,6 +622,7 @@ function aplicar(d) {
   if (d.midia) midia(d.midia);
   if (d.rest) applyRest(d.rest);
   if (d.photo_clock) applyPhotoClock(d.photo_clock);
+  if (d.toggles) aplicarToggles(d.toggles);
   if (d.confirmacao) confirmou(d.confirmacao);
   if (Array.isArray(d.alertas)) aplicarAlertas(d.alertas, d.allow_approve !== false);
 }

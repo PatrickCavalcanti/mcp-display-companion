@@ -196,7 +196,7 @@ def _screen(make_config, tmp_path, language=None):
 # Captured from the screen as it was before the texts moved to strings.py (the
 # Portuguese-only version), rendered from the same configuration as `_screen`.
 PT_BR_SCREEN = [
-    'T', '--:--', '--:--', '--', 'aguardando dados', 'weather', 'Mídia no computador',
+    'T', '--:--', '--:--', '--', 'aguardando dados', 'clima', 'Mídia no computador',
     'aguardando o player', 'Atalhos', 'Media', 'Key', 'Home', 'Ar', '—',
     'aria-label=Diminuir temperatura', '--°', 'aria-label=Aumentar temperatura', 'Luz', '—',
     'aguardando o Home Assistant', 'Ajustes',
@@ -206,8 +206,8 @@ PT_BR_SCREEN = [
     'data-texto-desligado=Desligado — a foto fica limpa, sem nada por cima',
     'data-texto-ligado=Ligado — hora grande e translúcida sobre a imagem',
     'Relógio sobre as fotos', 'Desligado — a foto fica limpa, sem nada por cima',
-    'conectando', 'aria-label=Page 1', 'aria-label=Page 2', 'aria-label=Page 3',
-    'aria-label=Page 4', 'aria-label=Page 5', 'PC', 'aria-label=dispensar', '×', 'Negar',
+    'conectando', 'aria-label=Página 1', 'aria-label=Página 2', 'aria-label=Página 3',
+    'aria-label=Página 4', 'aria-label=Página 5', 'PC', 'aria-label=dispensar', '×', 'Negar',
     'Segure p/ aprovar',
 ]
 
@@ -287,3 +287,11 @@ def test_user_labels_are_not_translated_nor_read_as_markers(make_config):
 def test_default_title_is_neutral(make_config):
     assert '<title>Panel</title>' in render(make_config())
     assert '<title>Meu</title>' in render(make_config(view=ViewSection(title='Meu')))
+
+
+def test_script_shows_the_held_state_of_toggle_buttons(make_config):
+    text = render(make_config([Action('pc_mic', 'Mic', 'hotkey_toggle', params={'keys': ['ctrl', 'win']})]))
+    assert 'if (d.toggles) aplicarToggles(d.toggles);' in text
+    assert "classList.toggle('retido', retido)" in text
+    assert "setAttribute('aria-pressed'" in text
+    assert '.btn.retido{' in text and 'var(--acc)' in text.split('.btn.retido{')[1].split('}')[0]

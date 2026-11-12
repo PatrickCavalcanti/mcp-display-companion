@@ -1,0 +1,83 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "timeout": 300,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\" || python -I -S \"${CLAUDE_PLUGIN_ROOT}/scripts/claude_alert_hook.py\"",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

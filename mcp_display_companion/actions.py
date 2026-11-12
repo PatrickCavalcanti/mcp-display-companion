@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from .config import Action, Config, expand_path
+from .config import DEFAULT_HOTKEY, NAMED_KEYS, Action, Config, expand_path, parse_key
 from .host import Host
 
 
@@ -53,6 +53,8 @@ class ActionRunner:
         self.rest = rest
         # clock overlay on photos is also service state
         self.overlay = overlay
+        # hotkey_toggle state: action id -> virtual keys currently held down
+        self.held_hotkeys: dict[str, list[int]] = {}
         # relative paths in `folder`/`command.cwd` are relative to config.json,
         # not the current working directory from which service was started
         self.base_dir = config.base_dir
@@ -88,6 +90,65 @@ class ActionRunner:
     def _run_key(self, action: Action) -> ActionResult:
         vk = int(action.params["vk"])
         return ActionResult(self.host.press_key(vk), f"vk {vk:#x}")
+
+    def is_hotkey_active(self, action_id: str) -> bool:
+        return action_id in self.held_hotkeys
+
+    def release_all_held_keys(self) -> None:
+        """Lets go of every key still held (service stopping): never leave a key stuck."""
+        for keys in list(self.held_hotkeys.values()):
+            for vk in reversed(keys):
+                try:
+                    self.host.key_up(vk)
+                except Exception:  # noqa: BLE001 - keep releasing the others
+                    pass
+        self.held_hotkeys.clear()
+
+    def hotkey_states(self) -> dict[str, bool]:
+        """Every configured `hotkey_toggle` action id -> whether its keys are held now."""
+        return {a.id: self.is_hotkey_active(a.id) for a in self.actions.values() if a.type == "hotkey_toggle"}
+
+    def release_configured_hotkeys(self) -> None:
+        """At startup: key_up for the keys of every `hotkey_toggle` action.
+
+        Recovers the keyboard after a killed service left keys held. Releasing a key
+        that is not down is harmless. The generic host cannot press keys, so there
+        is nothing to recover and it is left out (it would only log a complaint on
+        every start); any other failure is ignored.
+        """
+        if getattr(self.host, "name", "") == "generic":
+            return
+        for action in self.actions.values():
+            if action.type != "hotkey_toggle" or action.id in self.held_hotkeys:
+                continue
+            try:
+                keys = [parse_key(k) for k in action.params.get("keys", DEFAULT_HOTKEY)]
+                for vk in reversed(keys):
+                    self.host.key_up(vk)
+            except Exception:  # noqa: BLE001 - best effort, never blocks the start
+                pass
+
+    def _run_hotkey_toggle(self, action: Action) -> ActionResult:
+        keys_raw = list(action.params.get("keys", DEFAULT_HOTKEY))
+        held = self.held_hotkeys.pop(action.id, None)
+        if held is not None:
+            ok = True
+            for vk in reversed(held):
+                ok = bool(self.host.key_up(vk)) and ok
+            return ActionResult(ok, f"released {keys_raw}")
+        vk_list = [parse_key(k) for k in keys_raw]
+        # Register each key BEFORE pressing it: whatever path ends the run (an
+        # exception, the watchdog), release_all_held_keys already knows the key.
+        pressed = self.held_hotkeys.setdefault(action.id, [])
+        for vk in vk_list:
+            pressed.append(vk)
+            if not self.host.key_down(vk):
+                pressed.pop()  # this key never went down
+                self.held_hotkeys.pop(action.id, None)
+                for done in reversed(pressed):
+                    self.host.key_up(done)
+                return ActionResult(False, f"could not hold {keys_raw}")
+        return ActionResult(True, f"holding {keys_raw}")
 
     def _run_volume(self, action: Action) -> ActionResult:
         direction = action.params["direction"]

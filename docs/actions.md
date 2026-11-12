@@ -170,6 +170,50 @@ Like `rest`, it is a settings-page switch: with the pair configured, page 3 show
 a second row, the choice lives on the PC (`state.json`) and survives a reload of
 the screen. The `slides.clock` value is only the starting point.
 
+## `hotkey_toggle` — hold a key combination until the next tap
+
+```json
+{ "id": "pc_ditado", "label": "Dictation", "type": "hotkey_toggle",
+  "keys": ["ctrl", "win"], "icon": "mic" }
+```
+
+| Field | Values |
+|---|---|
+| `keys` | list of keys, default `["ctrl", "win"]`. Each is a name (`ctrl`, `win`, `shift`, `alt`, plus the `l`/`r` variants such as `lctrl`, `rwin`), a decimal virtual-key code (`66`) or a hex string (`"0x41"`) |
+
+The first tap presses the keys down in the order listed and **keeps them held**;
+the next tap releases them in the reverse order. It is meant for shortcuts that
+work while held, such as the Windows dictation shortcut (`ctrl` + `win`).
+
+**Windows only.** On macOS and Linux the action fails and the reason is written
+to the log.
+
+> **Warning:** while the button is on, the keys are physically held down in the
+> system — every other key you type is combined with them. Tap the button again
+> to release them. The service releases everything it holds when it stops
+> normally, whenever it has to reconnect to the panel (the phone is off, the
+> connection drops or the panel session is renewed), and at the next start (see
+> below).
+>
+> It does **not** release them when the process is killed by force. That includes
+> stopping, reinstalling or removing the service with the installer
+> (`scripts/install-service.ps1` uses `Stop-Process -Force`) and the supervisor's
+> `terminate()` in `service.py`. Then the keys stay down until you press and
+> release each of them on the keyboard, or start the service again. Release the
+> buttons on the panel before you remove the service.
+
+The service tells the screen whether the keys are held after each tap, and sends
+the state of every `hotkey_toggle` button again whenever it reconnects to the
+panel or publishes the screen again. The bundled screen draws a held button with the accent border and tint
+(class `retido`, `aria-pressed="true"`); it does not change the icon by itself, so
+pick the icon you want in the config. The icons `mic` and `mic_off` are available
+for this kind of button.
+
+At startup the service sends a key release for the keys of every `hotkey_toggle`
+action, which frees the keyboard after a killed service left keys held (releasing
+a key that is not down does nothing). On a host that cannot press keys (not
+Windows) this is skipped silently.
+
 ### Reserved names
 
 The View also calls two names that are **not** actions, handled by the service

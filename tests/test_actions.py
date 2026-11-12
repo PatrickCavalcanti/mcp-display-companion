@@ -100,3 +100,156 @@ def test_host_exception_is_result(make_config, host, monkeypatch):
     result = runner(make_config, host, 'key', {'vk': 1}).run('pc_action')
     assert isinstance(result, ActionResult) and result.ok is False
     assert 'host exploded' in result.detail
+
+
+# --------------------------------------------------------------------------- #
+# hotkey_toggle: hold a key combination until the next tap
+# --------------------------------------------------------------------------- #
+def _hotkey(make_config, host, keys=('ctrl', 'win')):
+    return runner(make_config, host, 'hotkey_toggle', {'keys': list(keys)})
+
+
+def test_hotkey_toggle_on_presses_keys_in_order(make_config, host):
+    r = _hotkey(make_config, host)
+    assert r.run('pc_action').ok is True
+    assert host.calls == [('key_down', (0x11,), {}), ('key_down', (0x5B,), {})]
+    assert r.is_hotkey_active('pc_action') is True
+
+
+def test_hotkey_toggle_off_releases_in_reverse_order(make_config, host):
+    r = _hotkey(make_config, host)
+    r.run('pc_action')
+    host.calls.clear()
+    assert r.run('pc_action').ok is True
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]
+    assert r.is_hotkey_active('pc_action') is False
+
+
+def test_hotkey_toggle_accepts_names_hex_and_numbers(make_config, host):
+    r = _hotkey(make_config, host, ('Shift', '0x41', 66, '67'))
+    r.run('pc_action')
+    assert [c[1][0] for c in host.calls] == [0x10, 0x41, 66, 67]
+
+
+def test_hotkey_toggle_default_keys_are_ctrl_win(make_config, host):
+    r = runner(make_config, host, 'hotkey_toggle', {})
+    r.run('pc_action')
+    assert [c[1][0] for c in host.calls] == [0x11, 0x5B]
+
+
+def test_hotkey_toggle_failure_releases_what_was_pressed(make_config, host, monkeypatch):
+    r = _hotkey(make_config, host)
+    pressed = []
+
+    def key_down(vk):
+        pressed.append(vk)
+        return len(pressed) < 2
+
+    monkeypatch.setattr(host, 'key_down', key_down)
+    result = r.run('pc_action')
+    assert result.ok is False
+    assert r.is_hotkey_active('pc_action') is False
+    assert host.calls == [('key_up', (0x11,), {})]
+
+
+def test_release_all_held_keys_lets_go_of_every_action(make_config, host):
+    config = make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl', 'win']}),
+                          Action('pc_b', 'B', 'hotkey_toggle', params={'keys': ['shift']})])
+    r = ActionRunner(config, host)
+    r.run('pc_a')
+    r.run('pc_b')
+    host.calls.clear()
+    r.release_all_held_keys()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {}), ('key_up', (0x10,), {})]
+    assert not r.is_hotkey_active('pc_a') and not r.is_hotkey_active('pc_b')
+    host.calls.clear()
+    r.release_all_held_keys()
+    assert host.calls == []
+
+
+def test_release_all_keeps_going_when_a_key_up_raises(make_config, host, monkeypatch):
+    r = _hotkey(make_config, host)
+    r.run('pc_action')
+    released = []
+
+    def key_up(vk):
+        released.append(vk)
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(host, 'key_up', key_up)
+    r.release_all_held_keys()
+    assert released == [0x5B, 0x11]
+    assert not r.is_hotkey_active('pc_action')
+
+
+def test_hotkey_toggle_on_generic_host_fails_cleanly(make_config):
+    from mcp_display_companion.host import Host
+    messages = []
+    generic = Host(log=messages.append)
+    r = ActionRunner(make_config([Action('pc_action', 'A', 'hotkey_toggle', params={'keys': ['ctrl', 'win']})]),
+                     generic)
+    result = r.run('pc_action')
+    assert result.ok is False
+    assert r.is_hotkey_active('pc_action') is False
+    assert any('key_down' in m and 'not implemented' in m for m in messages)
+    r.release_all_held_keys()  # nothing held: must not raise
+
+
+def test_hotkey_states_lists_every_toggle_action(make_config, host):
+    config = make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']}),
+                          Action('pc_b', 'B', 'hotkey_toggle', params={'keys': ['shift']}),
+                          Action('pc_k', 'K', 'key', params={'vk': 1})])
+    r = ActionRunner(config, host)
+    assert r.hotkey_states() == {'pc_a': False, 'pc_b': False}
+    r.run('pc_b')
+    assert r.hotkey_states() == {'pc_a': False, 'pc_b': True}
+
+
+def test_release_configured_hotkeys_sends_key_up_for_every_toggle_action(make_config, host):
+    config = make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl', 'win']}),
+                          Action('pc_b', 'B', 'hotkey_toggle', params={'keys': ['shift']}),
+                          Action('pc_k', 'K', 'key', params={'vk': 1})])
+    ActionRunner(config, host).release_configured_hotkeys()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {}), ('key_up', (0x10,), {})]
+
+
+def test_release_configured_hotkeys_does_nothing_without_toggle_actions(make_config, host):
+    ActionRunner(make_config([Action('pc_k', 'K', 'key', params={'vk': 1})]), host).release_configured_hotkeys()
+    assert host.calls == []
+
+
+def test_release_configured_hotkeys_is_silent_on_the_generic_host(make_config):
+    from mcp_display_companion.host import Host
+    messages = []
+    r = ActionRunner(make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']})]),
+                     Host(log=messages.append))
+    r.release_configured_hotkeys()
+    assert messages == []
+
+
+def test_release_configured_hotkeys_survives_a_failing_host(make_config, host, monkeypatch):
+    def boom(vk):
+        raise RuntimeError('no keyboard')
+    monkeypatch.setattr(host, 'key_up', boom)
+    ActionRunner(make_config([Action('pc_a', 'A', 'hotkey_toggle', params={'keys': ['ctrl']})]),
+                 host).release_configured_hotkeys()
+
+
+def test_hotkey_toggle_registers_each_key_before_pressing_it(make_config, host, monkeypatch):
+    """If the process dies mid-press, release_all_held_keys must already know the keys."""
+    r = _hotkey(make_config, host)
+    seen = []
+
+    def key_down(vk):
+        seen.append((vk, list(r.held_hotkeys.get('pc_action', []))))
+        if len(seen) == 2:
+            raise KeyboardInterrupt   # the process is going away between two key_down
+        return True
+
+    monkeypatch.setattr(host, 'key_down', key_down)
+    with pytest.raises(KeyboardInterrupt):
+        r.run('pc_action')
+    assert seen == [(0x11, [0x11]), (0x5B, [0x11, 0x5B])]
+    host.calls.clear()
+    r.release_all_held_keys()
+    assert host.calls == [('key_up', (0x5B,), {}), ('key_up', (0x11,), {})]

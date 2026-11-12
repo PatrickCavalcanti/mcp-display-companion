@@ -11,7 +11,7 @@ This is a ready-made panel for the [MCP Display](https://okapp.ai/app/mcp-displa
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 <p align="center">
-  <img src="docs/screenshots/panel-home.png" alt="The panel: clock, weather and now playing" width="640">
+  <img src="docs/media/demo.gif" alt="The panel in use: home, shortcuts, Home Assistant page and a Claude Code permission alert" width="640">
 </p>
 <p align="center">
   <img src="docs/screenshots/panel-shortcuts.png" alt="Shortcuts page" width="30%">
@@ -77,7 +77,7 @@ Photos on the slideshow page are examples from `slides/`. Put yours there, or po
 The panel is a base. Two things built on it:
 
 - **Home page.** Turn on `home` in `config.json` and the panel gets a page with one air conditioner (power, temperature) and one light. The phone talks to Home Assistant directly through a connection you set up in the MCP Display app, so the buttons do not go through the computer. See [`home` in the configuration](docs/configuration.md#home--home-control-page-home-assistant).
-- **Claude Code permission alert.** A hook tells the panel when a session waits for a permission. Denying is one tap. Approving from the panel is **off** by default (`alerts.allow_approve`); when you turn it on, you must hold the button for 1.5 s. See [`alerts` in the configuration](docs/configuration.md#alerts--claude-code-asking-for-permission).
+- **Claude Code permission alert.** A hook tells the panel when a session waits for a permission. Denying is one tap. Approving from the panel is **off** by default (`alerts.allow_approve`); when you turn it on, you must hold the button for 1.5 s. Install the hook with two commands, as a Claude Code plugin: `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion`, then `claude plugin install mcp-display-alerts@mcp-display`. The plugin installs only the hook: the service (this repository, version 1.1 or later) must be running, and on Windows you need Git Bash or PowerShell 7. See [`alerts` in the configuration](docs/configuration.md#alerts--claude-code-asking-for-permission).
 
 ## How it compares
 
@@ -88,7 +88,7 @@ If you need a browser locked to a dashboard, with sensors, camera or fleet manag
 ## FAQ
 
 **Can I use an old Android phone as a dashboard for Claude Code?**
-Yes. The phone runs the MCP Display app, this service runs on your computer, and the Claude Code alert page shows when a session waits for a permission. Any MCP-capable agent can also draw on the panel through the app.
+Yes. The phone runs the MCP Display app, this service runs on your computer, and the Claude Code alert page shows when a session waits for a permission. Any MCP-capable agent can also draw on the panel through the app. The hook installs with `claude plugin marketplace add PatrickCavalcanti/mcp-display-companion` and `claude plugin install mcp-display-alerts@mcp-display`. The plugin installs only the hook: the service (this repository, version 1.1 or later) must be running, and on Windows you need Git Bash or PowerShell 7.
 
 **Is the app free?**
 Yes, with ads. A one-time purchase removes them. It is on [Google Play](https://play.google.com/store/apps/details?id=br.com.okds.mcpdisplay).

@@ -58,6 +58,9 @@ def test_duplicate_id(load_config, raw_config):
     ('volume', {'direction': 'sideways'}), ('folder', {}), ('app', {}),
     ('url', {'url': 'example.org'}), ('url', {'url': 'spotify:'}),
     ('command', {'cmd': 1}), ('command', {'cmd': ['ok', 1]}), ('command', {'cmd': []}),
+    ('hotkey_toggle', {'keys': []}), ('hotkey_toggle', {'keys': 'ctrl'}),
+    ('hotkey_toggle', {'keys': ['ctrl', 'banana']}), ('hotkey_toggle', {'keys': [300]}),
+    ('hotkey_toggle', {'keys': [True]}), ('hotkey_toggle', {'keys': ['ctrl', None]}),
     ('display', {'brightness': 'bright'}), ('display', {'brightness': -1}), ('display', {'brightness': 101}),
 ])
 def test_invalid_action_params(load_config, raw_config, kind, params):
@@ -176,3 +179,13 @@ def test_view_language_rejects_unknown_value(load_config, raw_config, value):
     raw_config['view'] = {'language': value}
     with pytest.raises(ConfigError, match=r'view\.language.*en, pt-BR'):
         load_config(raw_config)
+
+
+def test_hotkey_toggle_defaults_to_ctrl_win(load_config, raw_config):
+    raw_config['actions'] = [{'id': 'pc_mic', 'type': 'hotkey_toggle'}]
+    assert load_config(raw_config).actions[0].params['keys'] == ['ctrl', 'win']
+
+
+def test_hotkey_toggle_keeps_declared_keys(load_config, raw_config):
+    raw_config['actions'] = [{'id': 'pc_mic', 'type': 'hotkey_toggle', 'keys': ['ctrl', 'shift', '0x41', 66]}]
+    assert load_config(raw_config).actions[0].params['keys'] == ['ctrl', 'shift', '0x41', 66]

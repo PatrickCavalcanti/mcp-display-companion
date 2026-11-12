@@ -1,0 +1,14 @@
+{
+  "name": "mcp-display",
+  "description": "Claude Code plugins for the MCP Display wall panel",
+  "owner": {
+    "name": "Patrick Cavalcanti"
+  },
+  "plugins": [
+    {
+      "name": "mcp-display-alerts",
+      "source": "./",
+      "description": "Shows Claude Code permission requests on the MCP Display wall panel (hook only; the Companion service runs separately)."
+    }
+  ]
+}

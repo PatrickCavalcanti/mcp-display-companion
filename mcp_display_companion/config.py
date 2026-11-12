@@ -34,7 +34,48 @@ ACTION_TYPES = {
     "display",  # adjusts panel screen brightness
     "rest",     # toggles rest mode (black screen after idle time)
     "overlay",  # toggles large translucent clock over photos
+    "hotkey_toggle",  # holds a key combination down until the next tap (e.g. ctrl+win)
 }
+
+# Names accepted in a `hotkey_toggle` `keys` list -> Windows virtual-key code.
+NAMED_KEYS: dict[str, int] = {
+    "ctrl": 0x11,
+    "control": 0x11,
+    "lctrl": 0xA2,
+    "rctrl": 0xA3,
+    "win": 0x5B,
+    "windows": 0x5B,
+    "lwin": 0x5B,
+    "rwin": 0x5C,
+    "shift": 0x10,
+    "lshift": 0xA0,
+    "rshift": 0xA1,
+    "alt": 0x12,
+    "lalt": 0xA4,
+    "ralt": 0xA5,
+}
+DEFAULT_HOTKEY = ["ctrl", "win"]
+
+
+def parse_key(key: Any) -> int:
+    """A key name ("ctrl"), a "0x.." / decimal string, or an int -> virtual-key code 1..255."""
+    if isinstance(key, bool):
+        raise ValueError(f"invalid key {key!r}")
+    if isinstance(key, int):
+        vk = key
+    elif isinstance(key, str):
+        text = key.lower().strip()
+        if text in NAMED_KEYS:
+            return NAMED_KEYS[text]
+        try:
+            vk = int(text, 16) if text.startswith("0x") else int(text)
+        except ValueError:
+            raise ValueError(f"unknown key {key!r}") from None
+    else:
+        raise ValueError(f"invalid key {key!r}")
+    if not 0 < vk < 256:
+        raise ValueError(f"key {key!r} outside 1..255")
+    return vk
 
 BYTE_UNITS = {"KB": 1024, "MB": 1024 ** 2}
 
@@ -64,9 +105,9 @@ def expand_path(value: str) -> Path:
 
 def default_secrets_path() -> Path:
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "secrets.json"
 
 
@@ -96,17 +137,17 @@ def default_alerts_dir() -> Path:
     if custom:
         return expand_path(custom)
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "alerts"
 
 
 def default_cursor_path() -> Path:
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
+        base = Path(os.environ.get("APPDATA") or Path.home())
     else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "mcp-display-companion" / "cursor.json"
 
 
@@ -188,7 +229,7 @@ def parse_action(raw: Any, index: int) -> Action:
     params: dict[str, Any] = dict(raw.get("params") or {})
     # convenience fields at action level (params level takes precedence)
     for key in ("command", "vk", "direction", "path", "target", "url", "browser",
-                "new_window", "cmd", "cwd", "detached", "brightness", "state"):
+                "new_window", "cmd", "cwd", "detached", "brightness", "state", "keys"):
         if key in raw and key not in params:
             params[key] = raw[key]
 
@@ -249,6 +290,18 @@ def _validate_action_params(action_id: str, action_type: str, params: dict[str, 
         vk = require("vk", int, "virtual key code, e.g. 175 = volume +")
         if not 0 < vk < 256:
             raise ConfigError(f"action {action_id}: vk outside 1..255 (got {vk})")
+    elif action_type == "hotkey_toggle":
+        keys = params.get("keys", DEFAULT_HOTKEY)
+        if not isinstance(keys, (list, tuple)) or not keys:
+            raise ConfigError(
+                f"action {action_id}: keys must be a non-empty list, e.g. [\"ctrl\", \"win\"]"
+            )
+        for key in keys:
+            try:
+                parse_key(key)
+            except ValueError as exc:
+                raise ConfigError(f"action {action_id}: {exc}") from None
+        params["keys"] = list(keys)
     elif action_type == "volume":
         direction = str(params.get("direction", "")).lower()
         if direction not in {"up", "down", "mute"}:

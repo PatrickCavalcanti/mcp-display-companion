@@ -214,26 +214,95 @@ a warning: a tap on it hides it.
 > the per-alert secret it sent to that View (kept in memory, never written to disk).
 
 The folder is filled by `scripts/claude_alert_hook.py` (standard library only).
-Register it in `~/.claude/settings.json`.
+Register it as a Claude Code plugin (two commands) or by hand in `~/.claude/settings.json`.
+
+### Install as a Claude Code plugin
+
+This repository is also a Claude Code plugin marketplace with one plugin,
+`mcp-display-alerts`. The plugin installs **only the hook**. You still install and
+run the service as the README describes. With the service stopped or the phone
+unreachable, the hook leaves at once and Claude Code shows its normal dialog, so
+the plugin is harmless without the service.
+
+```
+claude plugin marketplace add PatrickCavalcanti/mcp-display-companion
+claude plugin install mcp-display-alerts@mcp-display
+```
+
+Restart the running Claude Code sessions (or run `/reload-plugins`) to load it.
+
+* **Update:** `claude plugin marketplace update mcp-display`, then
+  `claude plugin update mcp-display-alerts@mcp-display`. Update the service from
+  the same repository too: the hook and the service go together.
+* **Remove:** `claude plugin uninstall mcp-display-alerts@mcp-display` (and
+  `claude plugin marketplace remove mcp-display` if you no longer want the marketplace).
+* **Already registered the hook by hand? Remove that registration from
+  `settings.json` before you install the plugin.** The two registrations make two
+  requests for the same tool call (the banner shows `+1`).
+* **Python:** the plugin command is `python3 ... || python ...`: it runs the
+  script with `python3`, and with `python` when there is no `python3`. One of them
+  must be on the `PATH` of the shell Claude Code uses for hooks (Git Bash, or
+  PowerShell 7 on Windows without Git Bash). If neither exists, the hook fails
+  without effect: the `PermissionRequest` hook has `"onFailure": "continue"`, so
+  Claude Code falls back to its normal dialog, and the other hooks are
+  asynchronous. `onFailure` needs Claude Code 2.1.295 or later.
+* **Alerts folder:** no setting needed. The hook and the service use the same
+  default folder on each system (see the `dir` row above). If you set `alerts.dir`,
+  also set `PANEL_COMPANION_ALERTS` for Claude Code.
+* **Shell and version:** the hook command uses `||`. On Windows it works with
+  Git Bash or PowerShell 7. With Windows PowerShell 5.1 the hook does not run (a
+  syntax error), the banner does not show, and Claude Code goes on to its normal
+  dialog. It needs Claude Code 2.1.295 or later (`onFailure`).
+
+#### If the banner does not show
+
+1. The service is version 1.1 or later, it is running, and it is connected to the
+   panel (`alerts.enabled` is `true`).
+2. The shell for hooks is Git Bash or PowerShell 7, not Windows PowerShell 5.1.
+3. The hook is registered only once: remove a manual registration if you use the
+   plugin.
+4. `PANEL_COMPANION_ALERTS` points to the same folder on both sides, if you set
+   `alerts.dir` or the variable.
+
+### Manual registration
 
 > **Test one terminal (CLI) session first.** The hook waits for the panel's answer
-> up to its time limit (290 s). Depending on the client, the PC dialog may only
-> appear when the hook ends. So with the service or the phone off, a permission
-> request can take up to that limit; set `PANEL_COMPANION_ALERT_WAIT` (seconds) to
-> shorten it. The hook does not check whether the service is alive. Register the
-> hook, run a command that asks for permission in a terminal session, and check
-> that the prompt shows up promptly before you keep it registered globally.
+> up to its time limit (290 s), but only while the service is alive. The service
+> renews a sign of life (`.service-alive` in the alerts folder) every few seconds
+> while it is connected to the phone. With the service stopped, or the phone
+> unreachable, the sign goes stale (older than 20 s; change it with
+> `PANEL_COMPANION_ALIVE_MAX_AGE`, in seconds) and the hook leaves at once with no
+> output, so Claude Code shows its normal dialog on the PC. The long wait only
+> happens with the service alive and nobody answering. Depending on the client, the
+> PC dialog may only appear when the hook ends. Register the hook, run a command
+> that asks for permission in a terminal session, and check that the prompt shows
+> up promptly before you keep it registered globally. The hook and the service come
+> from the same repository: update both together (an older service writes no sign
+> of life, so the new hook never offers the banner).
 
 Do **not** call the script directly (`python script.py`): if the file is missing,
-Python exits with code **2**, and Claude Code reads exit code 2 from a hook as
-"block / deny". Use this launcher instead: it exits 0 with no output when the
-script does not exist, and passes the script's own exit 0 through (use forward
-slashes in the path; `-I -S` keeps Python fast and isolated):
+Python exits with code **2**. Claude Code treats exit code 2 as a blocking error
+on several events (`PreToolUse`, `UserPromptSubmit`, `Stop` and others), while on
+`PermissionRequest` it is not honored and the permission flow goes on unchanged
+(see "Exit code 2 behavior per event" in <https://code.claude.com/docs/en/hooks>).
+This hook is only registered for `PermissionRequest`, `Notification` and the
+clearing events, and the clearing hooks run asynchronously, so a missing script
+would not block anything today. The launcher
+below avoids depending on that: it exits 0 with no output when the script does not
+exist, and passes the script's own exit 0 through (use forward
+slashes in the path; `-I -S` keeps Python fast and isolated). On Windows use the
+full path of `python.exe`; on macOS and Linux use `python3` (example below):
 
 * for the clear and `Notification` hooks (asynchronous):
 
 ```
 C:/Python313/python.exe -I -S -c "import os,runpy,sys; p=r'C:/path/to/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
+```
+
+  On macOS and Linux the same line reads:
+
+```
+python3 -I -S -c "import os,runpy,sys; p='/home/you/mcp-display-companion/scripts/claude_alert_hook.py'; os.path.isfile(p) or sys.exit(0); runpy.run_path(p, run_name='__main__')"
 ```
 
 * for the `PermissionRequest` hook (synchronous, timeout above the hook's own 290 s
@@ -265,8 +334,12 @@ How it works:
   message, at, request: {tool, summary, truncated}, actionable: true}`; `h` is a
   short hash of the tool call) and waits for the same name with `.answer`
   (`allow` or `deny`). On an answer it prints the decision JSON for Claude Code and
-  removes both files. The hook waits up to 290 s and then exits with no output;
-  it does not check whether the service is running. Depending on the client, the
+  removes both files. The hook waits up to 290 s and then exits with no output.
+  Before it writes the request, and on every turn of the wait, it checks the
+  service's sign of life (`.service-alive`, renewed on each loop round while the
+  service is connected to the phone, removed when it stops or reconnects). With no
+  sign, or one older than 20 s, it removes its request and exits at once with no
+  output, and Claude Code asks on the PC. Depending on the client, the
   PC dialog may only appear when the hook ends. If you answer on the PC, the clear
   events below delete the file, and the hook exits with no output. `ExitPlanMode`, `AskUserQuestion` and
   `mcp__ccd_*` tools are never offered for approval (the hook does nothing).
@@ -277,7 +350,7 @@ How it works:
   of one session keep their own banners. `UserPromptSubmit`, `Stop` and
   `SessionEnd` delete every file of that session.
 * The hook prints nothing except a decision, and always exits 0. Test knob: env
-  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait (use a short value to limit the delay when the service or phone is off).
+  `PANEL_COMPANION_ALERT_WAIT` (seconds) replaces the 290 s wait; `PANEL_COMPANION_ALIVE_MAX_AGE` (seconds, default 20, at least 4 times the service's 5 s loop round) is how old the sign of life may be before the hook stops waiting. The `Notification` fallback does not wait for anything, so it is written even without a sign of life.
 
 The View sends the reserved tools `pc_alerta_dispensar` (arguments `{id}`) and
 `pc_alerta_responder` (arguments `{id, decisao: "allow"|"deny"}`). Like `pc_rest_*`
@@ -356,7 +429,7 @@ A list; each item becomes a button (and a tool name the View may call). See
 |---|---|---|
 | `id` | — (**required**) | the tool name, `[a-z0-9_]`, starting with a letter. Use a `pc_` prefix |
 | `label` | the id | text under the button |
-| `type` | — (**required**) | `media`, `key`, `volume`, `folder`, `app`, `url`, `command`, `display` |
+| `type` | — (**required**) | `media`, `key`, `volume`, `folder`, `app`, `url`, `command`, `display`, `hotkey_toggle` |
 | `page` / `pages` | `2` | `2`, `[1, 2]`, `1` (which **requires** `featured`) or `3` (settings page — `rest` actions only) |
 | `featured` | `false` | the big button on page 1 — page 1 has exactly one slot |
 | `accent` | `false` | tinted (purple) button |
